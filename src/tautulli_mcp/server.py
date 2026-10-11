@@ -10,8 +10,8 @@ from typing import Any
 import httpx
 import uvicorn
 from fastmcp import FastMCP
+from fastmcp import settings as fastmcp_settings
 from fastmcp.server.auth.oidc_proxy import OIDCProxy
-from fastmcp.settings import settings as fastmcp_settings
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp
@@ -26,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 def create_app(settings: Settings | None = None) -> ASGIApp:
     config = settings or Settings.from_env()
+    for logger_name in ("httpx", "httpcore"):
+        logging.getLogger(logger_name).setLevel(logging.WARNING)
     config.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     config.state_dir.chmod(0o700)
     fastmcp_settings.home = config.state_dir
@@ -42,11 +44,18 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
         verify_id_token=True,
     )
 
+    health_client: TautulliClient | None = None
+
     @asynccontextmanager
     async def lifespan(_: FastMCP) -> AsyncIterator[dict[str, Any]]:
+        nonlocal health_client
         timeout = httpx.Timeout(15.0, connect=10.0)
         async with httpx.AsyncClient(timeout=timeout, verify=config.tautulli_tls_verify) as client:
-            yield {"tautulli": TautulliClient(config.tautulli_url, config.tautulli_api_key, client)}
+            health_client = TautulliClient(config.tautulli_url, config.tautulli_api_key, client)
+            try:
+                yield {"tautulli": health_client}
+            finally:
+                health_client = None
 
     mcp = FastMCP("Tautulli MCP", auth=auth, lifespan=lifespan)
     register_tools(mcp)
@@ -54,8 +63,10 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     @mcp.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def health(request: Request) -> JSONResponse:
         if request.query_params.get("deep") == "1":
+            if health_client is None:
+                return JSONResponse({"status": "unavailable"}, status_code=503)
             try:
-                await request.state.tautulli.call("get_server_info")
+                await health_client.call("get_server_info")
             except RuntimeError:
                 return JSONResponse({"status": "unavailable"}, status_code=503)
         return JSONResponse({"status": "ok"})

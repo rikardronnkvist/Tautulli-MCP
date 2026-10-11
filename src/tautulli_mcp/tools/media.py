@@ -6,9 +6,32 @@ from typing import Any
 from fastmcp import Context, FastMCP
 
 from tautulli_mcp.formatting import clamp, compact_lines, enum_error, rows, text
-from tautulli_mcp.tools.common import client_from_context, display_value
+from tautulli_mcp.tools.common import client_from_context
 
 MEDIA_TYPES = ("movie", "show", "artist")
+
+
+def _stats_text(data: Any) -> str:
+    records = rows(data)
+    if not records and isinstance(data, dict):
+        records = [data]
+    output = []
+    for record in records:
+        fields = []
+        for key, value in record.items():
+            normalized = key.lower()
+            if (
+                value is not None
+                and isinstance(value, (str, int, float, list, tuple))
+                and (
+                    any(term in normalized for term in ("play", "time", "duration"))
+                    or normalized in {"user", "friendly_name", "username"}
+                )
+            ):
+                fields.append(f"{key}={text(value)}")
+        if fields:
+            output.append(" | ".join(fields))
+    return "; ".join(output) or "none"
 
 
 def register_media_tools(mcp: FastMCP) -> None:
@@ -34,7 +57,7 @@ def register_media_tools(mcp: FastMCP) -> None:
                 or session.get("video_decision")
                 or session.get("quality_profile")
             )
-            reason = session.get("transcode_decision")
+            reason = session.get("transcode_decision_string")
             progress = session.get("progress_percent")
             details = [
                 f"{user}: {title}",
@@ -166,35 +189,25 @@ def register_media_tools(mcp: FastMCP) -> None:
             "summary",
             "genres",
             "actors",
+            "cast",
             "rating",
             "content_rating",
             "video_resolution",
+            "source_resolution",
             "video_codec",
             "audio_codec",
             "video_dynamic_range",
+            "container",
+            "bitrate",
             "file_size",
         )
         lines = ["Item details"]
         for key in fields:
             if record.get(key) is not None:
                 lines.append(f"{key}: {text(record[key])}")
-        for key, stats in (("Plays", watch_stats), ("Watched by", user_stats)):
-            stats_rows = rows(stats)
-            if stats_rows:
-                lines.append(
-                    f"{key}: "
-                    + "; ".join(
-                        display_value(
-                            row,
-                            ("total_plays", "plays", "user", "friendly_name", "total_time"),
-                        )
-                        for row in stats_rows
-                    )
-                )
-            elif stats not in (None, [], {}):
-                lines.append(
-                    f"{key}: {display_value(stats, ('total_plays', 'plays', 'total_time'))}"
-                )
+        for title, stats in (("Plays", watch_stats), ("Watched by", user_stats)):
+            if stats not in (None, [], {}):
+                lines.append(f"{title}: {_stats_text(stats)}")
         if len(lines) == 1:
             return f"Item details for rating key {rating_key}: no metadata available."
         return "\n".join(lines)

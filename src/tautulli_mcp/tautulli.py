@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import quote, quote_plus
 
 import httpx
 
@@ -51,17 +52,22 @@ class TautulliClient:
             result = payload.get("response", {})
             if result.get("result") != "success":
                 reason = str(result.get("message") or "unknown API error")
-                reason = reason.replace(self._api_key, "[redacted]").replace(
-                    self._base_url, "[redacted]"
-                )
+                for secret in {
+                    self._api_key,
+                    quote(self._api_key, safe=""),
+                    quote_plus(self._api_key),
+                }:
+                    if secret:
+                        reason = reason.replace(secret, "[redacted]")
+                reason = reason.replace(self._base_url, "[redacted]")
                 raise RuntimeError(f"Tautulli {command} failed: {reason}")
             return result.get("data")
         except RuntimeError:
             raise
-        except (httpx.HTTPError, ValueError, TypeError) as exc:
+        except (httpx.HTTPError, ValueError, TypeError, AttributeError) as exc:
             reason = (
                 "invalid response"
-                if isinstance(exc, (ValueError, TypeError))
+                if isinstance(exc, (ValueError, TypeError, AttributeError))
                 else type(exc).__name__
             )
             raise RuntimeError(f"Tautulli {command} failed: {reason}") from None

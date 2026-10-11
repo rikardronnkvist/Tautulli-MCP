@@ -106,6 +106,57 @@ def test_search_clamps_limit_and_includes_chaining_rating_key() -> None:
     assert "[key: 42]" in result
 
 
+def test_top_content_clamps_days_and_maps_category() -> None:
+    fake = FakeTautulli({"get_home_stats": []})
+    mcp = FastMCP("test")
+    register_tools(mcp)
+
+    asyncio.run(
+        get_tool(mcp, "top_content").fn(
+            ctx=tool_context(fake), category="tv", stat_type="plays", days=900
+        )
+    )
+
+    assert fake.calls == [
+        (
+            "get_home_stats",
+            {"stat_id": "top_tv", "stats_type": "plays", "time_range": 365},
+        )
+    ]
+
+
+def test_user_stats_omits_zero_play_users() -> None:
+    fake = FakeTautulli(
+        {
+            "get_users_table": [
+                {"friendly_name": "Owner", "plays": 5},
+                {"friendly_name": "Unused", "plays": 0},
+            ]
+        }
+    )
+    mcp = FastMCP("test")
+
+    register_tools(mcp)
+    result = asyncio.run(get_tool(mcp, "user_stats").fn(ctx=tool_context(fake)))
+
+    assert "Owner" in result
+    assert "Unused" not in result
+
+
+def test_stream_quality_requires_identity_and_valid_view() -> None:
+    fake = FakeTautulli({})
+    mcp = FastMCP("test")
+    register_tools(mcp)
+
+    tool = get_tool(mcp, "stream_quality")
+    missing_id = asyncio.run(tool.fn(ctx=tool_context(fake), view="stream"))
+    bad_view = asyncio.run(tool.fn(ctx=tool_context(fake), view="unknown"))
+
+    assert "requires row_id or session_key" in missing_id
+    assert "transcode, platforms, resolution, stream" in bad_view
+    assert fake.calls == []
+
+
 @pytest.mark.asyncio
 async def test_all_tools_with_respx_responses_from_json_fixture() -> None:
     fixtures = json.loads((FIXTURES / "tautulli.json").read_text(encoding="utf-8"))
@@ -151,6 +202,9 @@ async def test_all_tools_with_respx_responses_from_json_fixture() -> None:
     assert "row_id=7" in results["history"]
     assert "[key: 42]" in results["search"]
     assert "/private/library" not in results["item_details"]
-    assert "section_id=1" in results["library"]
+    assert "total_plays_24=1" in results["item_details"]
+    assert "total_plays_7=2" in results["item_details"]
+    assert "total_plays_30=4" in results["item_details"]
+    assert "[id: 1]" in results["library"]
     assert "peak" in results["viewing_patterns"]
     assert all(request.url.params["apikey"] == "fixture-key" for request in calls)

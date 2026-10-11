@@ -12,6 +12,12 @@ TOP_CATEGORIES = ("tv", "movies", "music", "users")
 STAT_TYPES = ("plays", "duration")
 PATTERNS = ("date", "weekday", "hour")
 QUALITY_VIEWS = ("transcode", "platforms", "resolution", "stream")
+HOME_STATS_IDS = {
+    "tv": "top_tv",
+    "movies": "top_movies",
+    "music": "top_music",
+    "users": "top_users",
+}
 
 
 def _chart(title: str, data: Any) -> str:
@@ -23,7 +29,11 @@ def _chart(title: str, data: Any) -> str:
         label = text(
             entry.get("date")
             or entry.get("day")
+            or entry.get("weekday")
+            or entry.get("dayofweek")
+            or entry.get("day_name")
             or entry.get("hour")
+            or entry.get("hourofday")
             or entry.get("label")
             or entry.get("stream_type")
         )
@@ -34,12 +44,12 @@ def _chart(title: str, data: Any) -> str:
         except (TypeError, ValueError):
             amount = 0
         values.append((label, amount))
-    peak = max(values, key=lambda value: value[1])[1]
+    peak_index, (_, peak) = max(enumerate(values), key=lambda indexed: indexed[1][1])
     maximum = max(peak, 1)
     lines = [title]
-    for label, amount in values:
+    for index, (label, amount) in enumerate(values):
         bar = "█" * min(30, round(amount / maximum * 30))
-        marker = " ← peak" if amount == peak else ""
+        marker = " ← peak" if index == peak_index else ""
         lines.append(f"{label}: {bar} {amount:g}{marker}")
     return "\n".join(lines)
 
@@ -68,7 +78,7 @@ def register_analytics_tools(mcp: FastMCP) -> None:
             return enum_error("stat_type", stat_type, STAT_TYPES)
         data = await client_from_context(ctx).call(
             "get_home_stats",
-            stat_id=category,
+            stat_id=HOME_STATS_IDS[category],
             stats_type=stat_type,
             time_range=clamp(days, 1, 365),
         )
@@ -112,11 +122,23 @@ def register_analytics_tools(mcp: FastMCP) -> None:
         duration = clamp(days, 1, 365)
         commands = {
             "date": ("get_plays_by_date", {"time_range": duration}),
-            "weekday": ("get_plays_by_dayofweek", {}),
-            "hour": ("get_plays_by_hourofday", {}),
+            "weekday": ("get_plays_by_dayofweek", {"time_range": duration}),
+            "hour": ("get_plays_by_hourofday", {"time_range": duration}),
         }
         command, params = commands[group_by]
-        data = await client_from_context(ctx).call(command, **params)
+        client = client_from_context(ctx)
+        data = await client.call(command, **params)
+        if group_by == "date":
+            streams = await client.call("get_plays_by_stream_type", time_range=duration)
+            return (
+                _chart(f"Viewing patterns by {group_by}", data)
+                + "\n\n"
+                + compact_lines(
+                    "Plays by stream type",
+                    rows(streams),
+                    ("stream_type", "plays", "count"),
+                )
+            )
         return _chart(f"Viewing patterns by {group_by}", data)
 
     @mcp.tool(
@@ -158,25 +180,49 @@ def register_analytics_tools(mcp: FastMCP) -> None:
                 ),
             )
         if view == "transcode":
-            results = await asyncio.gather(
-                client.call("get_plays_by_source_resolution", time_range=duration),
-                client.call("get_plays_by_stream_resolution", time_range=duration),
-            )
-            return (
-                _chart("Plays by source resolution", results[0])
-                + "\n\n"
-                + _chart("Plays by stream resolution", results[1])
+            data = await client.call("get_plays_by_stream_type", time_range=duration)
+            return compact_lines(
+                "Plays by stream type",
+                rows(data),
+                ("stream_type", "plays", "count"),
             )
         if view == "platforms":
-            data = await client.call("get_stream_type_by_top_10_platforms", time_range=duration)
-            return compact_lines(
-                "Stream type by platform",
-                rows(data),
-                ("platform", "direct_play", "direct_stream", "transcode"),
+            platform_data, home_data = await asyncio.gather(
+                client.call("get_stream_type_by_top_10_platforms", time_range=duration),
+                client.call(
+                    "get_home_stats",
+                    stat_id="top_platforms",
+                    stats_type="plays",
+                    time_range=duration,
+                ),
             )
-        data = await client.call("get_plays_by_stream_resolution", time_range=duration)
-        return compact_lines(
-            "Plays by stream resolution",
-            rows(data),
-            ("stream_resolution", "resolution", "plays", "count"),
+            return (
+                compact_lines(
+                    "Stream type by platform",
+                    rows(platform_data),
+                    ("platform", "direct_play", "direct_stream", "transcode"),
+                )
+                + "\n\n"
+                + compact_lines(
+                    "Top platforms",
+                    rows(home_data)[:10],
+                    ("platform", "title", "plays", "total_plays"),
+                )
+            )
+        source_data, stream_data = await asyncio.gather(
+            client.call("get_plays_by_source_resolution", time_range=duration),
+            client.call("get_plays_by_stream_resolution", time_range=duration),
+        )
+        return (
+            compact_lines(
+                "Plays by source resolution",
+                rows(source_data),
+                ("source_resolution", "resolution", "plays", "count"),
+            )
+            + "\n\n"
+            + compact_lines(
+                "Plays by stream resolution",
+                rows(stream_data),
+                ("stream_resolution", "resolution", "plays", "count"),
+            )
         )

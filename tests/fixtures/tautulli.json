@@ -40,6 +40,9 @@
   },
   "get_item_watch_time_stats": {
     "total_plays": 4,
+    "total_plays_24": 1,
+    "total_plays_7": 2,
+    "total_plays_30": 4,
     "total_time": "2 hours"
   },
   "get_item_user_stats": [],

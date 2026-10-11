@@ -38,11 +38,15 @@ def register_library_tools(mcp: FastMCP) -> None:
             return enum_error("order_dir", order_dir, ORDER_DIRECTIONS)
         client = client_from_context(ctx)
         if section_id is None:
-            return compact_lines(
-                "Libraries",
-                rows(await client.call("get_libraries_table")),
-                ("section_id", "section_name", "count", "parent_count"),
-            )
+            lines = ["Libraries"]
+            for item in rows(await client.call("get_libraries_table")):
+                section = item.get("section_id") or item.get("id")
+                name = item.get("section_name") or item.get("name", "Library")
+                detail = f"{name} [id: {section}]"
+                if item.get("count") is not None:
+                    detail += f" | count={item['count']}"
+                lines.append(" • " + detail)
+            return "\n".join(lines)
         params = {
             "section_id": section_id,
             "order_by": order_by,

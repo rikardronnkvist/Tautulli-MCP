@@ -30,15 +30,23 @@ def test_loads_defaults_and_normalizes_values() -> None:
     assert settings.state_dir == Path("/data")
 
 
-def test_secret_file_takes_precedence(tmp_path: Path) -> None:
-    secret_file = tmp_path / "api-key"
-    secret_file.write_text("secret-from-file\n", encoding="utf-8")
+@pytest.mark.parametrize(
+    ("variable", "attribute"),
+    (
+        ("TAUTULLI_API_KEY", "tautulli_api_key"),
+        ("OIDC_CLIENT_SECRET", "oidc_client_secret"),
+        ("JWT_SIGNING_KEY", "jwt_signing_key"),
+    ),
+)
+def test_secret_files_take_precedence(tmp_path: Path, variable: str, attribute: str) -> None:
+    secret_file = tmp_path / variable.lower()
+    secret_file.write_text("value-from-file\n", encoding="utf-8")
 
     settings = Settings.from_env(
-        config_env(TAUTULLI_API_KEY="environment-secret", TAUTULLI_API_KEY_FILE=str(secret_file))
+        config_env(**{variable: "environment-value", f"{variable}_FILE": str(secret_file)})
     )
 
-    assert settings.tautulli_api_key == "secret-from-file"
+    assert getattr(settings, attribute) == "value-from-file"
 
 
 def test_missing_required_values_are_reported_together() -> None:

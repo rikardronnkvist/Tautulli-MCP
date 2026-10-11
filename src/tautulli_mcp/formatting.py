@@ -32,6 +32,8 @@ def rows(data: Any) -> list[dict[str, Any]]:
 def text(value: Any, default: str = "unknown") -> str:
     if value is None or value == "":
         return default
+    if isinstance(value, (list, tuple, set)):
+        return ", ".join(map(str, value)) or default
     return str(value).replace("\n", " ").strip()
 
 

@@ -32,12 +32,17 @@ async def test_rejects_commands_outside_allowlist() -> None:
 
 
 @pytest.mark.asyncio
-async def test_errors_do_not_leak_api_key_or_url() -> None:
+async def test_errors_and_logs_do_not_leak_api_key_or_url(caplog) -> None:
     with respx.mock(base_url="http://tautulli:8181") as router:
         router.get("/api/v2").mock(
             return_value=httpx.Response(
                 200,
-                json={"response": {"result": "error", "message": "bad request"}},
+                json={
+                    "response": {
+                        "result": "error",
+                        "message": "top-secret at http://tautulli:8181/api/v2?apikey=top-secret",
+                    }
+                },
             )
         )
         async with httpx.AsyncClient() as http:
@@ -46,6 +51,7 @@ async def test_errors_do_not_leak_api_key_or_url() -> None:
                     "get_activity"
                 )
 
-    assert str(error.value) == "Tautulli get_activity failed: bad request"
+    assert str(error.value).startswith("Tautulli get_activity failed:")
     assert "top-secret" not in str(error.value)
     assert "http://" not in str(error.value)
+    assert "top-secret" not in caplog.text
