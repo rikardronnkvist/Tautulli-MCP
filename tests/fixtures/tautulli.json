@@ -2,7 +2,7 @@
   "get_activity": {
     "sessions": [
       {
-        "session_key": "session-1",
+        "session_key": "1",
         "full_title": "Example Movie",
         "friendly_name": "Owner",
         "progress_percent": 35,
@@ -21,7 +21,7 @@
   ],
   "get_stream_data": {
     "row_id": 7,
-    "session_key": "session-1",
+    "session_key": "1",
     "video_codec": "h264",
     "audio_codec": "aac",
     "bitrate": 4000
@@ -42,13 +42,12 @@
     "year": 2024,
     "file": "/private/library/example.mkv"
   },
-  "get_item_watch_time_stats": {
-    "total_plays": 4,
-    "total_plays_24": 1,
-    "total_plays_7": 2,
-    "total_plays_30": 4,
-    "total_time": "2 hours"
-  },
+  "get_item_watch_time_stats": [
+    {"query_days": 1, "total_plays": 1, "total_time": 1800},
+    {"query_days": 7, "total_plays": 2, "total_time": 3600},
+    {"query_days": 30, "total_plays": 4, "total_time": 7200},
+    {"query_days": 0, "total_plays": 4, "total_time": 7200}
+  ],
   "get_item_user_stats": [],
   "get_recently_added": [
     {
@@ -120,10 +119,10 @@
     ]
   },
   "get_plays_by_stream_type": {
-    "categories": ["Direct Play", "Transcode"],
+    "categories": ["2026-01-01", "2026-01-02"],
     "series": [
       {
-        "name": "Plays",
+        "name": "Direct Play",
         "data": [5, 2]
       }
     ]

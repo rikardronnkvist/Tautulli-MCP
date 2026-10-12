@@ -57,7 +57,7 @@ def test_history_clamps_length_caps_enrichment_and_hides_ip() -> None:
 
     assert fake.calls[0] == ("get_history", {"length": 1})
     assert sum(command == "get_stream_data" for command, _ in fake.calls) == 10
-    assert "row_id=0" in result
+    assert "[row_id: 0]" in result
     assert "ip_address" not in result
 
 
@@ -111,9 +111,9 @@ def test_search_clamps_limit_and_includes_chaining_rating_key() -> None:
     )
 
     assert fake.calls[0] == ("search", {"query": "Example", "limit": 50})
-    assert "[key: 42]" in result
-    assert "Movie: Example [key: 42]" in result
-    assert "Show: Example Show [key: 43]" in result
+    assert "[rating_key: 42]" in result
+    assert "Movie: Example | [rating_key: 42]" in result
+    assert "Show: Example Show | [rating_key: 43]" in result
 
 
 def test_top_content_clamps_days_and_maps_category() -> None:
@@ -160,7 +160,9 @@ def test_user_stats_passes_username_as_search() -> None:
 
     asyncio.run(get_tool(mcp, "user_stats").fn(ctx=tool_context(fake), user="Owner"))
 
-    assert fake.calls == [("get_users_table", {"search": "Owner"})]
+    assert fake.calls == [
+        ("get_users_table", {"search": "Owner", "order_column": "plays", "order_dir": "desc"})
+    ]
 
 
 def test_library_uses_tautulli_order_column_and_sort_title() -> None:
@@ -172,11 +174,11 @@ def test_library_uses_tautulli_order_column_and_sort_title() -> None:
         get_tool(mcp, "library").fn(ctx=tool_context(fake), section_id="1", order_by="sort_title")
     )
 
-    assert result == "Library section 1"
+    assert result == "Library [section_id: 1]"
     assert fake.calls == [
         (
             "get_library_media_info",
-            {"section_id": "1", "order_column": "sort_title", "order_dir": "desc", "length": 25},
+            {"section_id": 1, "order_column": "sort_title", "order_dir": "desc", "length": 25},
         )
     ]
 
@@ -248,22 +250,23 @@ async def test_all_tools_with_respx_responses_from_json_fixture() -> None:
             }
 
     assert all(isinstance(result, str) for result in results.values())
-    assert "session_key=session-1" in results["now_playing"]
-    assert "row_id=7" in results["history"]
-    assert "[key: 42]" in results["search"]
+    assert "[session_key: 1]" in results["now_playing"]
+    assert "[row_id: 7]" in results["history"]
+    assert "[rating_key: 42]" in results["search"]
     assert "/private/library" not in results["item_details"]
-    assert "total_plays_24=1" in results["item_details"]
-    assert "total_plays_7=2" in results["item_details"]
-    assert "total_plays_30=4" in results["item_details"]
-    assert "[id: 1]" in results["library"]
+    assert "24h | Plays: 1" in results["item_details"]
+    assert "7d | Plays: 2" in results["item_details"]
+    assert "30d | Plays: 4" in results["item_details"]
+    assert "[section_id: 1]" in results["library"]
     assert "peak" in results["viewing_patterns"]
-    assert "2026-01-01:" in results["viewing_patterns"]
+    assert "2026-01-01 00:00:" in results["viewing_patterns"]
     assert "5 ← peak" in results["viewing_patterns"]
-    assert "Direct Play" in results["viewing_patterns"]
+    assert "DP" in results["viewing_patterns"]
     assert "7 ← peak" in results["weekday_patterns"]
     assert "10:00:" in results["hour_patterns"]
-    assert "plays=5" in results["stream_quality"]
-    assert "direct_play=5" in results["platform_quality"]
-    assert "source_resolution=1080" in results["resolution_quality"]
-    assert "stream_resolution=720" in results["resolution_quality"]
+    assert "direct play" in results["stream_quality"]
+    assert "8 plays" in results["platform_quality"]
+    assert "1080" in results["resolution_quality"]
+    assert "720" in results["resolution_quality"]
+    assert all("unknown" not in result.lower() for result in results.values())
     assert all(request.url.params["apikey"] == "fixture-key" for request in calls)

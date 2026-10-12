@@ -15,6 +15,7 @@ services:
       JWT_SIGNING_KEY_FILE: /run/secrets/jwt_signing_key
       STATE_DIR: /data
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TZ: ${TZ:-UTC}
       PORT: "8000"
     secrets:
       - tautulli_api_key
