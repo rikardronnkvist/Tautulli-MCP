@@ -1,0 +1,188 @@
+{
+  "get_activity": {
+    "sessions": [
+      {
+        "media_type": "episode",
+        "grandparent_title": "Space Show",
+        "title": "The Arrival",
+        "parent_media_index": "1",
+        "media_index": "2",
+        "friendly_name": "Alice",
+        "user": "alice-account",
+        "session_key": "701",
+        "rating_key": "201",
+        "row_id": "11",
+        "state": "playing",
+        "player": "Living Room",
+        "platform": "Roku",
+        "quality_profile": "Original",
+        "duration": "3600000",
+        "view_offset": "900000",
+        "progress_percent": "25",
+        "transcode_decision": "direct play",
+        "video_resolution": "1080",
+        "video_codec": "h264",
+        "audio_codec": "aac",
+        "audio_channels": "2",
+        "stream_video_resolution": "1080",
+        "stream_video_codec": "h264",
+        "stream_audio_codec": "aac",
+        "stream_audio_channels": "2",
+        "ip_address": "192.0.2.11",
+        "file": "/private/space-show.mkv"
+      },
+      {
+        "media_type": "movie",
+        "title": "The Film",
+        "year": "2025",
+        "friendly_name": "Bob",
+        "session_key": "702",
+        "rating_key": "202",
+        "row_id": "12",
+        "player": "Browser",
+        "platform": "Chrome",
+        "quality_profile": "4 Mbps 720p",
+        "duration": "7200000",
+        "view_offset": "3600000",
+        "transcode_decision": "transcode",
+        "stream_video_decision": "transcode",
+        "stream_audio_decision": "transcode",
+        "transcode_decision_string": "Bandwidth limit",
+        "video_resolution": "4k",
+        "video_codec": "hevc",
+        "stream_video_resolution": "720",
+        "stream_video_codec": "h264",
+        "stream_audio_codec": "aac",
+        "stream_audio_channels": "2",
+        "transcode_hw_requested": "1",
+        "transcode_hw_encoding": "1",
+        "ip_address": "198.51.100.12"
+      }
+    ],
+    "lan_bandwidth": "8000",
+    "wan_bandwidth": "4000",
+    "total_bandwidth": "12000"
+  },
+  "get_history": {
+    "recordsTotal": "120",
+    "recordsFiltered": "2",
+    "total_duration": "10800",
+    "filter_duration": "5400",
+    "data": [
+      {
+        "row_id": "11",
+        "rating_key": "201",
+        "session_key": "701",
+        "media_type": "episode",
+        "grandparent_title": "Space Show",
+        "title": "The Arrival",
+        "parent_media_index": "1",
+        "media_index": "2",
+        "friendly_name": "Alice",
+        "date": "1704067200",
+        "duration": "1800",
+        "player": "Living Room",
+        "platform": "Roku",
+        "transcode_decision": "direct play",
+        "percent_complete": "100",
+        "ip_address": "192.0.2.11"
+      },
+      {
+        "row_id": "12",
+        "rating_key": "202",
+        "media_type": "movie",
+        "title": "The Film",
+        "year": "2025",
+        "user": "Bob",
+        "date": "1704070800",
+        "duration": "3600",
+        "player": "Browser",
+        "platform": "Chrome",
+        "transcode_decision": "transcode",
+        "percent_complete": "50",
+        "ip_address": "198.51.100.12"
+      }
+    ]
+  },
+  "get_stream_data": {
+    "row_id": "11",
+    "session_key": "701",
+    "video_codec": "hevc",
+    "video_resolution": "4k",
+    "stream_video_codec": "h264",
+    "stream_video_resolution": "720",
+    "stream_audio_codec": "aac",
+    "stream_audio_channels": "2",
+    "transcode_decision": "transcode",
+    "transcode_decision_string": "Bandwidth limit",
+    "ip_address": "192.0.2.200",
+    "file": "/private/library/film.mkv"
+  },
+  "search": {
+    "results_count": 3,
+    "results_list": {
+      "movie": [{"title": "The Film", "year": "2025", "rating_key": "202"}],
+      "show": [{"title": "Space Show", "rating_key": "200"}],
+      "episode": [{
+        "grandparent_title": "Space Show",
+        "title": "The Arrival",
+        "parent_media_index": "1",
+        "media_index": "2",
+        "rating_key": "201"
+      }]
+    }
+  },
+  "get_metadata": {
+    "media_type": "movie",
+    "title": "The Film",
+    "year": "2025",
+    "rating_key": "202",
+    "duration": "7200000",
+    "library_name": "Cinema",
+    "originally_available_at": "2025-03-04",
+    "summary": "A voyage across the stars.",
+    "genres": ["Science Fiction", "Adventure"],
+    "actors": [
+      {"name": "Actor One"}, {"name": "Actor Two"}, {"name": "Actor Three"},
+      {"name": "Actor Four"}, {"name": "Actor Five"}, {"name": "Actor Six"},
+      {"name": "Actor Seven"}
+    ],
+    "writers": ["Writer One", "Writer Two", "Writer Three", "Writer Four", "Writer Five", "Writer Six"],
+    "directors": ["Director One"],
+    "rating": "8.5",
+    "content_rating": "PG",
+    "guids": ["imdb://tt1234567", {"id": "tmdb://12345"}, "tvdb://67890"],
+    "media_info": [
+      {
+        "video_resolution": "4k",
+        "video_codec": "hevc",
+        "audio_codec": "truehd",
+        "audio_channels": "7.1",
+        "container": "mkv",
+        "video_dynamic_range": "HDR10",
+        "video_dovi_present": "1",
+        "parts": [{"file": "/private/library/film.mkv", "file_size": "1073741824"}]
+      }
+    ],
+    "file": "/private/library/film.mkv",
+    "location": "/private/library",
+    "unknown_detail": "unknown"
+  },
+  "get_item_watch_time_stats": [
+    {"query_days": "1", "total_plays": "2", "total_time": "14400"},
+    {"query_days": "7", "total_plays": "5", "total_time": "36000"},
+    {"query_days": "30", "total_plays": "8", "total_time": "57600"},
+    {"query_days": "0", "total_plays": "12", "total_time": "86400"}
+  ],
+  "get_item_user_stats": [
+    {"friendly_name": "Alice", "total_plays": "2", "total_time": "14400"},
+    {"friendly_name": "Bob", "total_plays": "10", "total_time": "72000"}
+  ],
+  "get_recently_added": {
+    "recently_added": [
+      {"media_type": "movie", "title": "The Film", "year": "2025", "rating_key": "202", "added_at": "1704067200"},
+      {"media_type": "show", "title": "Space Show", "rating_key": "200", "added_at": "1704070800"},
+      {"media_type": "artist", "title": "The Artist", "rating_key": "300", "added_at": null}
+    ]
+  }
+}

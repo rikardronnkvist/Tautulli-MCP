@@ -1,0 +1,187 @@
+{
+  "top_tv": {
+    "response": {
+      "result": "success",
+      "data": [
+        {"stat_id": "top_movies", "rows": [{"title": "Wrong category", "total_plays": 99}]},
+        {"stat_id": "top_tv", "rows": [
+          {"title": "The Example Show", "total_plays": 12, "total_duration": 36000, "rating_key": "101"},
+          {"title": "Second Show", "total_plays": 4, "total_duration": 5400, "rating_key": "102"}
+        ]}
+      ]
+    }
+  },
+  "top_movies": {
+    "response": {
+      "result": "success",
+      "data": [
+        {"stat_id": "top_movies", "rows": [
+          {"title": "Example Movie", "year": 2024, "total_plays": "7", "total_duration": "25200", "rating_key": "201"}
+        ]}
+      ]
+    }
+  },
+  "top_music": {
+    "response": {
+      "result": "success",
+      "data": [{"stat_id": "top_music", "rows": [
+        {"title": "Example Artist", "total_plays": 18, "total_duration": 3600, "rating_key": "301"}
+      ]}]
+    }
+  },
+  "top_users": {
+    "response": {
+      "result": "success",
+      "data": [{"stat_id": "top_users", "rows": [
+        {"friendly_name": "Family Room", "user": "internal-user", "user_id": 2, "total_plays": 11, "total_duration": 7200}
+      ]}]
+    }
+  },
+  "top_platforms": {
+    "response": {
+      "result": "success",
+      "data": [{"stat_id": "top_platforms", "rows": [
+        {"platform": "Roku", "total_plays": 10, "total_duration": 36000},
+        {"platform": "Web", "total_plays": 5, "total_duration": 7200}
+      ]}]
+    }
+  },
+  "get_users_table": {
+    "response": {
+      "result": "success",
+      "data": {"recordsTotal": 3, "data": [
+        {"friendly_name": "Guest", "username": "guest", "user_id": 3, "plays": 2, "total_time": 3600, "last_seen": "2024-01-03", "full_title": "Guest Movie"},
+        {"friendly_name": "Unused", "plays": 0, "last_seen": 0},
+        {"friendly_name": "Family Room", "username": "internal-user", "user_id": 2, "plays": "12", "total_time": "36000", "last_seen": "1704153600", "full_title": "Latest Movie", "year": 2024, "media_type": "movie"}
+      ]}
+    }
+  },
+  "get_plays_by_date": {
+    "response": {
+      "result": "success",
+      "data": {
+        "categories": ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"],
+        "series": [
+          {"name": "TV", "data": [0, 2, 0, 1, 0]},
+          {"name": "Movies", "data": [0, 1, 0, 1, 0]},
+          {"name": "Music", "data": [0, 0, 0, 1, 0]}
+        ]
+      }
+    }
+  },
+  "get_plays_by_stream_type": {
+    "response": {
+      "result": "success",
+      "data": {
+        "categories": ["2024-01-04", "2024-01-01", "2024-01-05", "2024-01-02", "2024-01-03"],
+        "series": [
+          {"name": "Direct Play", "data": [0, 0, 0, 2, 0]},
+          {"name": "Direct Stream", "data": [1, 0, 0, 0, 0]},
+          {"name": "Transcode", "data": [2, 0, 0, 1, 0]}
+        ]
+      }
+    }
+  },
+  "get_plays_by_dayofweek": {
+    "response": {
+      "result": "success",
+      "data": {
+        "categories": ["Sunday", "Monday", "Tuesday"],
+        "series": [
+          {"name": "TV", "data": [0, 4, 0]},
+          {"name": "Movies", "data": [0, 2, 0]},
+          {"name": "Music", "data": [0, 0, 0]}
+        ]
+      }
+    }
+  },
+  "get_plays_by_hourofday": {
+    "response": {
+      "result": "success",
+      "data": {
+        "categories": ["00", "01", "02"],
+        "series": [
+          {"name": "TV", "data": [0, 1, 0]},
+          {"name": "Movies", "data": [0, 1, 0]},
+          {"name": "Music", "data": [0, 1, 0]}
+        ]
+      }
+    }
+  },
+  "get_stream_type_by_top_10_platforms": {
+    "response": {
+      "result": "success",
+      "data": {
+        "categories": ["Roku", "Web", "Unused"],
+        "series": [
+          {"name": "Direct Play", "data": [6, 0, 0]},
+          {"name": "Direct Stream", "data": [2, 1, 0]},
+          {"name": "Transcode", "data": [2, 4, 0]}
+        ]
+      }
+    }
+  },
+  "get_plays_by_source_resolution": {
+    "response": {
+      "result": "success",
+      "data": {
+        "categories": ["4k", "1080"],
+        "series": [
+          {"name": "Direct Play", "data": [2, 4]},
+          {"name": "Direct Stream", "data": [0, 1]},
+          {"name": "Transcode", "data": [3, 2]}
+        ]
+      }
+    }
+  },
+  "get_plays_by_stream_resolution": {
+    "response": {
+      "result": "success",
+      "data": {
+        "categories": ["4k", "1080", "720"],
+        "series": [
+          {"name": "Direct Play", "data": [2, 4, 0]},
+          {"name": "Direct Stream", "data": [0, 1, 0]},
+          {"name": "Transcode", "data": [0, 2, 3]}
+        ]
+      }
+    }
+  },
+  "get_stream_data": {
+    "response": {
+      "result": "success",
+      "data": {
+        "row_id": 42,
+        "full_title": "Example Movie",
+        "media_type": "movie",
+        "year": 2024,
+        "rating_key": "201",
+        "platform": "Web",
+        "video_codec": "hevc",
+        "video_resolution": "4k",
+        "video_width": 3840,
+        "video_height": 2160,
+        "audio_codec": "truehd",
+        "audio_channels": 8,
+        "bitrate": 24000,
+        "stream_video_codec": "h264",
+        "stream_video_resolution": "1080",
+        "stream_video_width": 1920,
+        "stream_video_height": 1080,
+        "stream_audio_codec": "aac",
+        "stream_audio_channels": 2,
+        "stream_bitrate": 8000,
+        "stream_video_decision": "transcode",
+        "stream_audio_decision": "transcode",
+        "stream_subtitle_decision": "burn",
+        "subtitle_codec": "pgs",
+        "transcode_hw_decoding": 1,
+        "transcode_hw_encoding": 1,
+        "transcode_reason": "Video codec unsupported",
+        "ip_address": "192.0.2.55",
+        "file": "/private/library/movie.mkv",
+        "unknown_field": "private metadata"
+      }
+    }
+  }
+}

@@ -23,6 +23,19 @@ All tools are read-only. Use rating keys returned by `search` or `recently_added
 `item_details`. Use library section IDs with `library`; use history `row_id` or an active
 `session_key` with `stream_quality`.
 
+Outputs use compact readable lines, human-readable watch times, and bracketed chaining
+IDs (for example, `[rating_key: 42]`). Missing fields are omitted. Timestamps are displayed
+as `YYYY-MM-DD HH:MM` in `TZ`, falling back to UTC for an unset or invalid timezone.
+Enum parameters advertise their allowed values in the MCP input schemas.
+
+`history` defaults to 10 entries (maximum 50); optional stream enrichment is parallel and
+limited to 10 entries, and IP addresses are hidden unless requested. `recently_added`
+includes all media types unless filtered. `top_content` defaults to TV ranked by plays.
+`stream_quality` defaults to direct-play/direct-stream/transcode counts per platform;
+its `platforms`, `resolution`, and `stream` views show platform watch time, source versus
+delivered resolutions, and detailed stream decisions respectively. The `stream` view
+requires a history `row_id` or active `session_key`.
+
 ## Configuration
 
 All settings are environment variables. Secret values support Docker's `*_FILE` convention;
@@ -42,6 +55,7 @@ the file value takes precedence when both forms are set.
 | `STATE_DIR` | no | `/data` | Persistent encrypted OAuth registration/token storage |
 | `LOG_LEVEL` | no | `INFO` | Python logging level |
 | `PORT` | no | `8000` | HTTP listen port |
+| `TZ` | no | `UTC` | IANA timezone for displayed timestamps, e.g. `Europe/Stockholm` |
 
 The service exits at startup with the names of all missing required settings. It never logs
 secret values or complete Tautulli request URLs.

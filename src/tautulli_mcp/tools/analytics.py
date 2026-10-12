@@ -1,11 +1,23 @@
 """Top content, user statistics, viewing patterns, and stream quality tools."""
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from fastmcp import Context, FastMCP
+from pydantic import Field
 
-from tautulli_mcp.formatting import clamp, compact_lines, enum_error, rows, text
+from tautulli_mcp.formatting import (
+    clamp,
+    enum_error,
+    format_duration,
+    format_timestamp,
+    identifiers,
+    media_title,
+    number,
+    rows,
+    stream_details,
+    text,
+)
 from tautulli_mcp.tools.common import client_from_context
 
 TOP_CATEGORIES = ("tv", "movies", "music", "users")
@@ -20,45 +32,20 @@ HOME_STATS_IDS = {
 }
 
 
-def _chart(title: str, data: Any) -> str:
-    entries = _graph_rows(data, "label")
-    if not entries:
-        return f"{title}: no data."
-    values = []
-    for entry in entries:
-        label = text(
-            entry.get("date")
-            or entry.get("day")
-            or entry.get("weekday")
-            or entry.get("dayofweek")
-            or entry.get("day_name")
-            or entry.get("hour")
-            or entry.get("hourofday")
-            or entry.get("label")
-            or entry.get("stream_type")
-        )
-        try:
-            if _is_graph(data):
-                amount = sum(float(value or 0) for key, value in entry.items() if key != "label")
-            else:
-                amount = float(
-                    entry.get("plays") or entry.get("count") or entry.get("total_plays") or 0
-                )
-        except (TypeError, ValueError):
-            amount = 0
-        values.append((label, amount))
-    peak_index, (_, peak) = max(enumerate(values), key=lambda indexed: indexed[1][1])
-    maximum = max(peak, 1)
-    lines = [title]
-    for index, (label, amount) in enumerate(values):
-        bar = "█" * min(30, round(amount / maximum * 30))
-        marker = " ← peak" if index == peak_index else ""
-        lines.append(f"{label}: {bar} {amount:g}{marker}")
-    return "\n".join(lines)
+def _home_rows(data: Any, stat_id: str) -> list[dict[str, Any]]:
+    entries = rows(data)
+    if any("stat_id" in entry for entry in entries):
+        return [
+            row
+            for entry in entries
+            if entry.get("stat_id") == stat_id
+            for row in rows(entry.get("rows", []))
+        ]
+    return entries
 
 
 def _series_key(name: Any) -> str:
-    return text(name, "value").strip().lower().replace(" ", "_").replace("-", "_")
+    return text(name).strip().lower().replace(" ", "_").replace("-", "_")
 
 
 def _is_graph(data: Any) -> bool:
@@ -69,10 +56,9 @@ def _is_graph(data: Any) -> bool:
     )
 
 
-def _graph_rows(data: Any, category_field: str) -> list[dict[str, Any]]:
+def _graph_rows(data: Any) -> list[dict[str, Any]]:
     if not _is_graph(data):
         return rows(data)
-    categories = data["categories"]
     series = [
         (_series_key(item.get("name")), item.get("data"))
         for item in data["series"]
@@ -80,205 +66,314 @@ def _graph_rows(data: Any, category_field: str) -> list[dict[str, Any]]:
     ]
     return [
         {
-            category_field: category,
+            "label": category,
             **{name: values[index] for name, values in series if index < len(values)},
         }
-        for index, category in enumerate(categories)
+        for index, category in enumerate(data["categories"])
     ]
 
 
-def _graph_fields(data: Any, category_field: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
-    if not _is_graph(data):
-        return fallback
-    series_fields = (
-        _series_key(item.get("name"))
-        for item in data["series"]
-        if isinstance(item, dict) and isinstance(item.get("data"), list)
+def _label(entry: dict[str, Any]) -> str:
+    for key in (
+        "label",
+        "date",
+        "day",
+        "weekday",
+        "dayofweek",
+        "day_name",
+        "hour",
+        "hourofday",
+        "platform",
+        "source_resolution",
+        "stream_resolution",
+        "resolution",
+        "stream_type",
+    ):
+        if entry.get(key) is not None:
+            label = text(entry[key])
+            if label:
+                return label
+    return "Unlabelled"
+
+
+def _plays(entry: dict[str, Any]) -> float:
+    return number(entry.get("total_plays", entry.get("plays", entry.get("count", 0))))
+
+
+def _decisions(entry: dict[str, Any]) -> tuple[float, float, float]:
+    return (
+        number(entry.get("direct_play", entry.get("dp"))),
+        number(entry.get("direct_stream", entry.get("ds"))),
+        number(entry.get("transcode", entry.get("tc"))),
     )
-    return (category_field, *series_fields)
 
 
-def _number(value: Any) -> float:
-    try:
-        return float(value or 0)
-    except (TypeError, ValueError):
-        return 0
+def _amount(entry: dict[str, Any], graph: bool) -> float:
+    if graph:
+        return sum(number(value) for key, value in entry.items() if key != "label")
+    return _plays(entry)
+
+
+def _decision_counts(entry: dict[str, Any]) -> str:
+    dp, ds, tc = _decisions(entry)
+    return f"DP {dp:g} / DS {ds:g} / TC {tc:g}"
+
+
+def _chart(title: str, data: Any, *, trim_dates: bool = False, streams: Any = None) -> str:
+    entries = _graph_rows(data)
+    values = [(entry, _amount(entry, _is_graph(data))) for entry in entries]
+    if trim_dates:
+        first = next((index for index, (_, amount) in enumerate(values) if amount > 0), 0)
+        values = values[first:]
+    if not values:
+        return f"{title}: no data."
+    total = sum(amount for _, amount in values)
+    peak_index, (_, peak) = max(enumerate(values), key=lambda item: item[1][1])
+    lines = [title, f"Total: {total:g} plays | Average: {total / len(values):.2f} plays"]
+    if _is_graph(data):
+        breakdown = []
+        for label, keys in (
+            ("TV", ("tv", "television")),
+            ("Movies", ("movies", "movie")),
+            ("Music", ("music",)),
+        ):
+            amount = sum(sum(number(entry.get(key)) for key in keys) for entry, _ in values)
+            breakdown.append(f"{label}: {amount:g}")
+        lines.append(" | ".join(breakdown))
+    stream_map = {_label(entry): entry for entry in _graph_rows(streams)}
+    for index, (entry, amount) in enumerate(values):
+        label = _label(entry)
+        bar = "█" * min(30, round(amount / max(peak, 1) * 30))
+        detail = f" | {_decision_counts(stream_map[label])}" if label in stream_map else ""
+        marker = " ← peak" if index == peak_index and peak > 0 else ""
+        display_label = (format_timestamp(label)[:10] or label) if trim_dates else label
+        lines.append(f"{display_label}: {bar} {amount:g}{detail}{marker}")
+    return "\n".join(lines)
+
+
+def _ranked(title: str, entries: list[dict[str, Any]], category: str) -> str:
+    if not entries:
+        return f"{title}: no data."
+    lines = [title]
+    for index, entry in enumerate(entries[:10], 1):
+        if category == "users":
+            name = text(entry.get("friendly_name")) or text(entry.get("username")) or "User"
+        elif category == "platforms":
+            name = text(entry.get("platform")) or text(entry.get("title")) or "Platform"
+        else:
+            name = media_title(entry) or "Untitled"
+            year = text(entry.get("year"))
+            if category == "movies" and year and f"({year})" not in name:
+                name += f" ({year})"
+        duration = format_duration(
+            entry.get("total_duration", entry.get("duration", entry.get("total_time", 0)))
+        )
+        ids = identifiers(entry)
+        lines.append(
+            f"{index}. {name} — {_plays(entry):g} plays, {duration}" + (f" {ids}" if ids else "")
+        )
+    return "\n".join(lines)
+
+
+def _quality_section(title: str, data: Any, *, overall: bool = False) -> str:
+    entries = _graph_rows(data)
+    if not entries:
+        return f"{title}: no data."
+    lines = [title]
+    totals = [0.0, 0.0, 0.0]
+    for entry in entries:
+        decisions = _decisions(entry)
+        total = sum(decisions)
+        totals = [left + right for left, right in zip(totals, decisions, strict=True)]
+        percent = decisions[2] / total * 100 if total else 0
+        amount = total if _is_graph(data) else _plays(entry) or total
+        lines.append(
+            f"{_label(entry)} — {amount:g} plays | {_decision_counts(entry)} | TC {percent:.1f}%"
+        )
+    if overall:
+        total = sum(totals)
+        percent = totals[2] / total * 100 if total else 0
+        lines.append(
+            f"Overall — {total:g} plays | DP {totals[0]:g} / DS {totals[1]:g}"
+            f" / TC {totals[2]:g} | TC {percent:.1f}%"
+        )
+    return "\n".join(lines)
+
+
+def _down_transcoded(source: Any, delivered: Any) -> bool:
+    if not (_is_graph(source) and _is_graph(delivered)):
+        return False
+    sources, streams = _graph_rows(source), _graph_rows(delivered)
+    four_k = {"4k", "2160", "2160p"}
+    lower = {"1080", "1080p", "720", "720p", "576", "576p", "480", "480p", "sd"}
+    source_tc = sum(_decisions(entry)[2] for entry in sources)
+    source_4k = sum(_decisions(entry)[2] for entry in sources if _label(entry).lower() in four_k)
+    delivered_tc = sum(_decisions(entry)[2] for entry in streams)
+    lower_tc = sum(_decisions(entry)[2] for entry in streams if _label(entry).lower() in lower)
+    return source_4k > 0 and source_tc == delivered_tc and delivered_tc == lower_tc
+
+
+def _optional_id(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise ValueError
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = int(value.strip())
+    else:
+        raise ValueError
+    if parsed < 0:
+        raise ValueError
+    return parsed
 
 
 def register_analytics_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         annotations={"readOnlyHint": True},
-        description=(
-            "Show the top 10 TV, movie, music, or user stats by plays or duration over a "
-            "clamped number of days."
-        ),
+        description="Show the top 10 TV, movie, music, or user stats by plays or watch time.",
     )
     async def top_content(
-        ctx: Context, category: str = "movies", stat_type: str = "plays", days: int = 30
+        ctx: Context,
+        category: Annotated[
+            Literal["tv", "movies", "music", "users"], Field(description="Content category.")
+        ] = "tv",
+        stat_type: Annotated[
+            Literal["plays", "duration"], Field(description="Rank by plays or watch time.")
+        ] = "plays",
+        days: Annotated[int, Field(description="Lookback days, clamped to 1–365.")] = 30,
     ) -> str:
         if category not in TOP_CATEGORIES:
             return enum_error("category", category, TOP_CATEGORIES)
         if stat_type not in STAT_TYPES:
             return enum_error("stat_type", stat_type, STAT_TYPES)
+        stat_id = HOME_STATS_IDS[category]
         data = await client_from_context(ctx).call(
-            "get_home_stats",
-            stat_id=HOME_STATS_IDS[category],
-            stats_type=stat_type,
-            time_range=clamp(days, 1, 365),
+            "get_home_stats", stat_id=stat_id, stats_type=stat_type, time_range=clamp(days, 1, 365)
         )
-        return compact_lines(
-            f"Top {category} by {stat_type}",
-            rows(data)[:10],
-            ("title", "friendly_name", "user", "total_plays", "plays", "duration"),
-        )
+        return _ranked(f"Top {category} by {stat_type}", _home_rows(data, stat_id), category)
 
     @mcp.tool(
         annotations={"readOnlyHint": True},
-        description=(
-            "Show Tautulli user playback totals, watch time, and last-seen time. "
-            "Optionally filter by username."
-        ),
+        description="Show active users ranked by plays with watch time and latest playback.",
     )
-    async def user_stats(ctx: Context, user: str | None = None) -> str:
+    async def user_stats(
+        ctx: Context,
+        user: Annotated[str | None, Field(description="Optional username search filter.")] = None,
+    ) -> str:
         data = await client_from_context(ctx).call(
-            "get_users_table", **({"search": user} if user else {})
+            "get_users_table",
+            order_column="plays",
+            order_dir="desc",
+            **({"search": user} if user else {}),
         )
-        users = [
-            entry
-            for entry in rows(data)
-            if _number(entry.get("plays") or entry.get("total_plays")) > 0
-        ]
-        return compact_lines(
-            "User stats",
-            users,
-            ("friendly_name", "username", "plays", "total_plays", "total_time", "last_seen"),
+        users = sorted(
+            (entry for entry in rows(data) if _plays(entry) > 0), key=_plays, reverse=True
         )
+        lines = ["User stats"]
+        for index, entry in enumerate(users, 1):
+            name = text(entry.get("friendly_name")) or text(entry.get("username")) or "User"
+            details = [
+                f"{index}. {name} — {_plays(entry):g} plays",
+                format_duration(entry.get("total_time", entry.get("duration", 0))),
+            ]
+            last_seen = format_timestamp(entry.get("last_seen", entry.get("last_played")))
+            if last_seen:
+                details.append(f"Last seen: {last_seen}")
+            latest = media_title(entry)
+            if latest:
+                details.append(f"Latest: {latest}")
+            ids = identifiers(entry)
+            lines.append(" | ".join(details) + (f" {ids}" if ids else ""))
+        return "\n".join(lines) if users else "User stats: no active users."
 
     @mcp.tool(
         annotations={"readOnlyHint": True},
-        description=(
-            "Visualize playback by date, weekday, or hour as a text bar chart and mark the peak."
-        ),
+        description="Chart plays by date, weekday or hour with totals, average and media mix.",
     )
-    async def viewing_patterns(ctx: Context, group_by: str = "date", days: int = 30) -> str:
+    async def viewing_patterns(
+        ctx: Context,
+        group_by: Annotated[
+            Literal["date", "weekday", "hour"], Field(description="Playback grouping.")
+        ] = "date",
+        days: Annotated[int, Field(description="Lookback days, clamped to 1–365.")] = 30,
+    ) -> str:
         if group_by not in PATTERNS:
             return enum_error("group_by", group_by, PATTERNS)
         duration = clamp(days, 1, 365)
-        commands = {
-            "date": ("get_plays_by_date", {"time_range": duration}),
-            "weekday": ("get_plays_by_dayofweek", {"time_range": duration}),
-            "hour": ("get_plays_by_hourofday", {"time_range": duration}),
-        }
-        command, params = commands[group_by]
+        command = {
+            "date": "get_plays_by_date",
+            "weekday": "get_plays_by_dayofweek",
+            "hour": "get_plays_by_hourofday",
+        }[group_by]
         client = client_from_context(ctx)
-        data = await client.call(command, **params)
-        if group_by == "date":
-            streams = await client.call("get_plays_by_stream_type", time_range=duration)
-            return (
-                _chart(f"Viewing patterns by {group_by}", data)
-                + "\n\n"
-                + compact_lines(
-                    "Plays by stream type",
-                    _graph_rows(streams, "stream_type"),
-                    _graph_fields(streams, "stream_type", ("stream_type", "plays", "count")),
-                )
-            )
-        return _chart(f"Viewing patterns by {group_by}", data)
+        data = await client.call(command, time_range=duration)
+        streams = (
+            await client.call("get_plays_by_stream_type", time_range=duration)
+            if group_by == "date"
+            else None
+        )
+        return _chart(
+            f"Viewing patterns by {group_by}", data, trim_dates=group_by == "date", streams=streams
+        )
 
     @mcp.tool(
         annotations={"readOnlyHint": True},
-        description=(
-            "Inspect transcoding, platform and resolution trends, or detailed stream data for "
-            "one history row_id/session_key."
-        ),
+        description="Inspect transcoding, top platforms, resolutions, or a detailed stream.",
     )
     async def stream_quality(
         ctx: Context,
-        view: str = "transcode",
-        days: int = 30,
-        row_id: str | None = None,
-        session_key: str | None = None,
+        view: Annotated[
+            Literal["transcode", "platforms", "resolution", "stream"],
+            Field(description="Quality report to display."),
+        ] = "transcode",
+        days: Annotated[int, Field(description="Lookback days, clamped to 1–365.")] = 30,
+        row_id: Annotated[int | None, Field(description="History row ID for view=stream.")] = None,
+        session_key: Annotated[
+            int | None, Field(description="Active session key for view=stream.")
+        ] = None,
     ) -> str:
         if view not in QUALITY_VIEWS:
             return enum_error("view", view, QUALITY_VIEWS)
         client = client_from_context(ctx)
         duration = clamp(days, 1, 365)
         if view == "stream":
-            if not row_id and not session_key:
+            try:
+                row_id, session_key = _optional_id(row_id), _optional_id(session_key)
+            except (TypeError, ValueError, OverflowError):
+                return "row_id and session_key must be non-negative integer IDs."
+            if row_id is None and session_key is None:
                 return "view=stream requires row_id or session_key."
-            params = {"row_id": row_id} if row_id else {"session_key": session_key}
+            params = {"row_id": row_id} if row_id is not None else {"session_key": session_key}
             data = await client.call("get_stream_data", **params)
-            return compact_lines(
-                "Stream details",
-                rows(data),
-                (
-                    "row_id",
-                    "session_key",
-                    "platform",
-                    "video_codec",
-                    "audio_codec",
-                    "stream_video_decision",
-                    "transcode_decision",
-                    "transcode_decision_string",
-                    "bitrate",
-                ),
-            )
+            entries = rows(data)
+            if not entries:
+                return "Stream details: no data."
+            lines = ["Stream details"]
+            for entry in entries:
+                entry = {**params, **entry}
+                detail = stream_details(entry)
+                if detail:
+                    lines.append(detail)
+            return "\n".join(lines)
         if view == "transcode":
-            data = await client.call("get_plays_by_stream_type", time_range=duration)
-            return compact_lines(
-                "Plays by stream type",
-                _graph_rows(data, "stream_type"),
-                _graph_fields(data, "stream_type", ("stream_type", "plays", "count")),
-            )
+            data = await client.call("get_stream_type_by_top_10_platforms", time_range=duration)
+            return _quality_section("Stream type by platform", data, overall=True)
         if view == "platforms":
-            platform_data, home_data = await asyncio.gather(
-                client.call("get_stream_type_by_top_10_platforms", time_range=duration),
-                client.call(
-                    "get_home_stats",
-                    stat_id="top_platforms",
-                    stats_type="plays",
-                    time_range=duration,
-                ),
+            data = await client.call(
+                "get_home_stats", stat_id="top_platforms", stats_type="plays", time_range=duration
             )
-            return (
-                compact_lines(
-                    "Stream type by platform",
-                    _graph_rows(platform_data, "platform"),
-                    _graph_fields(
-                        platform_data,
-                        "platform",
-                        ("platform", "direct_play", "direct_stream", "transcode"),
-                    ),
-                )
-                + "\n\n"
-                + compact_lines(
-                    "Top platforms",
-                    rows(home_data)[:10],
-                    ("platform", "title", "plays", "total_plays"),
-                )
-            )
-        source_data, stream_data = await asyncio.gather(
+            return _ranked("Top platforms", _home_rows(data, "top_platforms"), "platforms")
+        source, delivered = await asyncio.gather(
             client.call("get_plays_by_source_resolution", time_range=duration),
             client.call("get_plays_by_stream_resolution", time_range=duration),
         )
-        return (
-            compact_lines(
-                "Plays by source resolution",
-                _graph_rows(source_data, "source_resolution"),
-                _graph_fields(
-                    source_data,
-                    "source_resolution",
-                    ("source_resolution", "resolution", "plays", "count"),
-                ),
-            )
+        result = (
+            _quality_section("Source resolutions", source)
             + "\n\n"
-            + compact_lines(
-                "Plays by stream resolution",
-                _graph_rows(stream_data, "stream_resolution"),
-                _graph_fields(
-                    stream_data,
-                    "stream_resolution",
-                    ("stream_resolution", "resolution", "plays", "count"),
-                ),
-            )
+            + _quality_section("Delivered resolutions", delivered)
         )
+        if _down_transcoded(source, delivered):
+            result += "\n4K sources were down-transcoded to lower delivered resolutions."
+        return result

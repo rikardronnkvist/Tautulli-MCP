@@ -1,0 +1,19 @@
+{
+  "get_libraries_table": {
+    "data": [
+      {"section_id": "1", "section_name": "Movies", "section_type": "movie", "count": "12", "plays": "30", "last_accessed": "1704067200", "path": "/private/movies"},
+      {"section_id": 2, "section_name": "Television", "section_type": "show", "count": "4", "parent_count": "9", "child_count": "80", "plays": "200", "last_accessed": 1704067200},
+      {"section_id": "3", "section_name": "Music", "section_type": "artist", "count": "5", "parent_count": "20", "child_count": "300", "plays": 0, "last_accessed": null},
+      {"section_id": "4", "section_name": "Empty", "section_type": "movie", "count": 0, "plays": 0, "last_accessed": 0}
+    ]
+  },
+  "get_library_media_info": {
+    "total_file_size": "3221225472",
+    "filtered_file_size": "1073741824",
+    "data": [
+      {"rating_key": "42", "title": "Example Film", "year": "2024", "media_type": "movie", "video_resolution": "1080", "video_codec": "h264", "audio_codec": "aac", "container": "mkv", "file_size": "1073741824", "play_count": "3", "last_played": "1704067200", "file": "/private/movies/film.mkv"},
+      {"rating_key": 43, "title": "Unwatched", "video_resolution": "", "video_codec": null, "file_size": null, "play_count": 0, "last_played": 0, "file_path": "/private/movies/unwatched.mkv"},
+      {"rating_key": "44", "title": "Sparse", "file_size": "", "play_count": null, "last_played": null}
+    ]
+  }
+}
