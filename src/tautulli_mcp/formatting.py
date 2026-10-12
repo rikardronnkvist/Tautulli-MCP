@@ -71,6 +71,20 @@ def format_timestamp(value: Any) -> str:
         return ""
 
 
+def format_date(value: Any) -> str:
+    """Render calendar dates without timezone shifts; date epochs use UTC."""
+    if not text(value):
+        return ""
+    try:
+        try:
+            date = datetime.fromtimestamp(float(value), tz=UTC)
+        except (TypeError, ValueError):
+            date = datetime.fromisoformat(text(value).replace("Z", "+00:00"))
+        return date.strftime("%Y-%m-%d")
+    except (ValueError, OverflowError, OSError):
+        return ""
+
+
 def format_duration(seconds: Any) -> str:
     if not text(seconds):
         return ""
@@ -114,13 +128,25 @@ def identifiers(record: Mapping[str, Any]) -> str:
     )
 
 
-def media_title(record: Mapping[str, Any]) -> str:
+def format_title(record: Mapping[str, Any]) -> str:
+    """Render a consistent movie or episode title across tool payloads."""
     title = text(record.get("title")) or text(record.get("full_title"))
-    kind = record.get("media_type") or record.get("type")
+    kind = text(record.get("media_type") or record.get("type")).lower()
     if kind == "episode":
         show = text(record.get("grandparent_title"))
-        if not text(record.get("title")) and show:
-            for separator in (" - ", " — "):
+        if not show:
+            for candidate in (record.get("full_title"), title, record.get("last_played")):
+                combined = text(candidate)
+                for separator in (" — ", " - "):
+                    if separator in combined:
+                        show, fallback = combined.split(separator, 1)
+                        if not title or title == combined:
+                            title = fallback.strip()
+                        break
+                if show:
+                    break
+        if show:
+            for separator in (" — ", " - "):
                 prefix = f"{show}{separator}"
                 if title.startswith(prefix):
                     title = title[len(prefix) :].strip()
@@ -132,14 +158,30 @@ def media_title(record: Mapping[str, Any]) -> str:
             index = f"S{int(number(season)):02}E{int(number(episode)):02}"
         detail = " ".join(part for part in (index, f'"{title}"' if title else "") if part)
         return " — ".join(part for part in (show, detail) if part)
-    if kind == "movie" and text(record.get("year")):
+    if kind == "movie" and title and text(record.get("year")):
+        if title.endswith(f" ({text(record['year'])})"):
+            return title
         return f"{title} ({text(record['year'])})"
     return text(record.get("full_title")) or title
 
 
+media_title = format_title
+
+
+def _decision(value: Any) -> str:
+    value = text(value).lower().replace("_", " ").replace("-", " ")
+    value = " ".join(value.split())
+    aliases = {
+        "copy": "direct stream",
+        "directplay": "direct play",
+        "directstream": "direct stream",
+    }
+    return aliases.get(value, value)
+
+
 def playback_decision(record: Mapping[str, Any]) -> str:
     decisions = [
-        text(record.get(key)).lower().replace("_", " ")
+        _decision(record.get(key))
         for key in (
             "transcode_decision",
             "stream_video_decision",
@@ -148,14 +190,13 @@ def playback_decision(record: Mapping[str, Any]) -> str:
             "audio_decision",
         )
     ]
-    for mode in ("transcode", "direct stream", "copy", "direct play"):
+    for mode in ("transcode", "direct stream", "direct play"):
         if mode in decisions:
-            return "direct stream" if mode == "copy" else mode
+            return mode
     return ""
 
 
-def stream_details(record: Mapping[str, Any]) -> str:
-    """Describe an allow-listed stream payload without exposing file paths or IPs."""
+def _stream_record(record: Mapping[str, Any]) -> dict[str, Any]:
     merged = dict(record)
     for key in ("session_info", "media_info"):
         nested = record.get(key)
@@ -163,10 +204,100 @@ def stream_details(record: Mapping[str, Any]) -> str:
             nested = next((item for item in nested if isinstance(item, Mapping)), None)
         if isinstance(nested, Mapping):
             merged.update(nested)
-    record = merged
+    return merged
+
+
+def _first(record: Mapping[str, Any], *keys: str) -> str:
+    return next(
+        (
+            value
+            for key in keys
+            if isinstance(record.get(key), (str, int, float, bool)) and (value := text(record[key]))
+        ),
+        "",
+    )
+
+
+def _stream_changes(record: Mapping[str, Any], kind: str) -> list[str]:
+    changes = []
+    source = _first(record, f"{kind}_codec", f"source_{kind}_codec")
+    delivered = _first(record, f"stream_{kind}_codec")
+    if source and delivered and source.lower() != delivered.lower():
+        codecs = {"dca": "DTS", "dts": "DTS", "aac": "AAC"} if kind == "audio" else {}
+        changes.append(
+            " → ".join(codecs.get(value.lower(), value) for value in (source, delivered))
+        )
+    if kind == "video":
+        source = _first(record, "video_full_resolution", "video_resolution", "source_resolution")
+        delivered = _first(record, "stream_video_full_resolution", "stream_video_resolution")
+        if source and delivered and source.lower() != delivered.lower():
+            changes.append(f"{source} → {delivered}")
+    return changes
+
+
+def transcode_reason(record: Mapping[str, Any]) -> str:
+    """Use only known reason fields or observed stream changes, never dump the payload."""
+    record = _stream_record(record)
+    reasons = []
+    keys = ["transcode_reason", "transcode_decision_string"]
+    for kind in ("video", "audio", "subtitle"):
+        keys.extend(
+            (
+                f"{kind}_reason",
+                f"stream_{kind}_reason",
+                f"{kind}_transcode_reason",
+                f"{kind}_decision_reason",
+                f"stream_{kind}_decision_reason",
+            )
+        )
+    for key in keys:
+        raw = record.get(key)
+        if isinstance(raw, str) and (value := text(raw)) and value not in reasons:
+            reasons.append(value)
+    if reasons:
+        return "; ".join(reasons)
+    for kind in ("video", "audio"):
+        reasons.extend(f"{kind}: {change}" for change in _stream_changes(record, kind))
+    subtitle = _decision(_first(record, "stream_subtitle_decision", "subtitle_decision"))
+    subtitle_changes = _stream_changes(record, "subtitle")
+    if subtitle in {"burn", "transcode"}:
+        codec = _first(record, "subtitle_codec", "source_subtitle_codec", "stream_subtitle_codec")
+        detail = ", ".join(subtitle_changes) or codec
+        reasons.append(f"subtitles: {subtitle}" + (f" ({detail})" if detail else ""))
+    elif subtitle_changes:
+        reasons.extend(f"subtitles: {change}" for change in subtitle_changes)
+    return "; ".join(reasons)
+
+
+def stream_details(record: Mapping[str, Any]) -> str:
+    """Describe an allow-listed stream payload without exposing file paths or IPs."""
+    record = _stream_record(record)
 
     def first(*keys: str) -> str:
-        return next((value for key in keys if (value := text(record.get(key)))), "")
+        return _first(record, *keys)
+
+    def hardware(*keys: str) -> str:
+        value = first(*keys)
+        if value.lower() in {"1", "1.0", "true", "yes"}:
+            return "yes"
+        if value.lower() in {"0", "0.0", "false", "no"}:
+            return "no"
+        return value
+
+    def decision(kind: str) -> str:
+        value = _decision(first(f"stream_{kind}_decision", f"{kind}_decision"))
+        changes = _stream_changes(record, kind)
+        if not value and changes:
+            value = "transcode"
+        if kind == "subtitle":
+            codec = ", ".join(changes) or first(
+                "subtitle_codec", "source_subtitle_codec", "stream_subtitle_codec"
+            )
+            if codec:
+                value = f"{value} ({codec})" if value else codec
+        elif value and changes:
+            value += f" ({', '.join(changes)})"
+        return value
 
     def media(delivered: bool) -> str:
         prefix = "stream_" if delivered else ""
@@ -192,7 +323,7 @@ def stream_details(record: Mapping[str, Any]) -> str:
         return ", ".join(parts)
 
     lines = []
-    heading = media_title(record)
+    heading = format_title(record)
     ids = identifiers(record)
     if heading or ids:
         lines.append(" ".join(part for part in (heading, ids) if part))
@@ -200,12 +331,12 @@ def stream_details(record: Mapping[str, Any]) -> str:
         ("Quality", first("quality_profile")),
         ("Source", media(False)),
         ("Delivered", media(True)),
-        ("Video", first("stream_video_decision", "video_decision")),
-        ("Audio", first("stream_audio_decision", "audio_decision")),
-        ("Subtitles", first("stream_subtitle_decision", "subtitle_decision")),
-        ("HW decode", first("transcode_hw_decoding", "transcode_hw_decode")),
-        ("HW encode", first("transcode_hw_encoding", "transcode_hw_encode")),
-        ("Transcode reason", first("transcode_reason", "transcode_decision_string")),
+        ("Video", decision("video")),
+        ("Audio", decision("audio")),
+        ("Subtitles", decision("subtitle")),
+        ("HW decode", hardware("transcode_hw_decoding", "transcode_hw_decode")),
+        ("HW encode", hardware("transcode_hw_encoding", "transcode_hw_encode")),
+        ("Transcode reason", transcode_reason(record)),
     ):
         if value:
             lines.append(f"{label}: {value}")

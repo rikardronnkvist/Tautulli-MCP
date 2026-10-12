@@ -10,16 +10,18 @@ from pydantic import Field
 from tautulli_mcp.formatting import (
     clamp,
     enum_error,
+    format_date,
     format_duration,
     format_size,
     format_timestamp,
+    format_title,
     identifiers,
-    media_title,
     number,
     playback_decision,
     rows,
     stream_details,
     text,
+    transcode_reason,
 )
 from tautulli_mcp.tools.common import client_from_context
 
@@ -219,7 +221,7 @@ def register_media_tools(mcp: FastMCP) -> None:
             lines.append(
                 " • "
                 + _line(
-                    media_title(session),
+                    format_title(session),
                     _field("User", user),
                     _field("State", session.get("state")),
                     _field("Progress", position),
@@ -229,7 +231,7 @@ def register_media_tools(mcp: FastMCP) -> None:
                     _field("Mode", playback_decision(session)),
                     _field(
                         "Transcode reason",
-                        _first(session, "transcode_reason", "transcode_decision_string"),
+                        transcode_reason(session),
                     ),
                     identifiers(session),
                 )
@@ -314,7 +316,7 @@ def register_media_tools(mcp: FastMCP) -> None:
             lines.append(
                 " • "
                 + _line(
-                    media_title(entry),
+                    format_title(entry),
                     _field("User", _first(entry, "friendly_name", "user", "username")),
                     _field("Date", format_timestamp(_first(entry, "date", "started"))),
                     _field("Duration", _duration(_first(entry, "duration", "play_duration"))),
@@ -375,7 +377,7 @@ def register_media_tools(mcp: FastMCP) -> None:
         lines = ["Search results"]
         for item in results:
             kind = text(_first(item, "media_type", "type"))
-            title = media_title(item)
+            title = format_title(item)
             lines.append(
                 " • " + _line(f"{kind.title()}: {title}" if kind else title, identifiers(item))
             )
@@ -410,12 +412,12 @@ def register_media_tools(mcp: FastMCP) -> None:
         items = rows(metadata)
         record = items[0] if items else {}
         lines = [
-            _line("Item details", media_title(record), identifiers({**record, "rating_key": key}))
+            _line("Item details", format_title(record), identifiers({**record, "rating_key": key}))
         ]
         fields = [
             _field("Type", _first(record, "media_type", "type")),
             _field("Library", _first(record, "library_name", "section_name")),
-            _field("Originally available", format_timestamp(record.get("originally_available_at"))),
+            _field("Originally available", format_date(record.get("originally_available_at"))),
             _field("Duration", _duration(record.get("duration"), milliseconds=True)),
             _field("Rating", record.get("rating")),
             _field("Content rating", record.get("content_rating")),
@@ -482,7 +484,7 @@ def register_media_tools(mcp: FastMCP) -> None:
             lines.append(
                 " • "
                 + _line(
-                    media_title(item),
+                    format_title(item),
                     _field("Type", _first(item, "media_type", "type")),
                     _field("Library", _first(item, "library_name", "section_name")),
                     _field("Added", format_timestamp(item.get("added_at"))),

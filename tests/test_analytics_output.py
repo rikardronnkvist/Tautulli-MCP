@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -199,6 +200,89 @@ async def test_numeric_movie_title_remains_a_title(payloads: dict[str, Any]) -> 
     assert "Latest: 1917" in output
 
 
+@pytest.mark.parametrize("show", ["SouthLAnd", None])
+async def test_latest_episode_uses_shared_title_format(payloads, show) -> None:
+    payloads["get_users_table"]["response"]["data"]["data"] = [
+        {
+            "title": "Owner",
+            "plays": 7,
+            "last_played": "SouthLAnd - Mozambique",
+            "media_type": "episode",
+            "grandparent_title": show,
+            "parent_media_index": 1,
+            "media_index": 2,
+        }
+    ]
+    output, _ = await invoke("user_stats", payloads)
+    assert 'Latest: SouthLAnd — S01E02 "Mozambique"' in output
+
+
+@pytest.mark.parametrize(
+    ("group", "command", "categories"),
+    [
+        ("date", "get_plays_by_date", ["2026-10-06", "2026-10-07"]),
+        ("weekday", "get_plays_by_dayofweek", ["Tuesday", "Wednesday"]),
+        ("hour", "get_plays_by_hourofday", ["00", "01"]),
+    ],
+)
+@pytest.mark.parametrize("include_media", [True, False])
+async def test_patterns_never_sum_two_breakdowns(
+    payloads, group, command, categories, include_media
+) -> None:
+    decisions = [
+        {"name": "Direct Play", "data": [7, 1]},
+        {"name": "Direct Stream", "data": [0, 1]},
+        {"name": "Transcode", "data": [0, 1]},
+    ]
+    media = [
+        {"name": "TV", "data": [5, 1]},
+        {"name": "Movies", "data": [2, 2]},
+        {"name": "Music", "data": [0, 0]},
+    ]
+    payloads[command]["response"]["data"] = {
+        "categories": categories,
+        "series": (media if include_media else []) + decisions,
+    }
+    payloads["get_plays_by_stream_type"]["response"]["data"] = {
+        "categories": ["2026-10-06 00:00:00", "2026-10-07 00:00:00"],
+        "series": decisions,
+    }
+    output, requests = await invoke("viewing_patterns", payloads, group_by=group)
+    bars = [line for line in output.splitlines() if re.search(r": █+", line)]
+    amounts = [int(re.search(r"█+ (\d+)", line)[1]) for line in bars]
+    assert amounts == [7, 3]
+    assert f"Total: {sum(amounts)} plays" in output
+    assert "Total: 20 plays" not in output
+    if include_media:
+        assert "TV: 6 | Movies: 4 | Music: 0" in output
+    if group == "date":
+        assert "00:00" not in output
+        assert "DP 7 / DS 0 / TC 0" in bars[0]
+        assert [request["cmd"] for request in requests] == [command, "get_plays_by_stream_type"]
+
+
+async def test_stream_audio_transcode_reason_and_hardware_flags(payloads) -> None:
+    payloads["get_stream_data"]["response"]["data"] = {
+        "video_codec": "h264",
+        "stream_video_codec": "h264",
+        "video_decision": "direct play",
+        "audio_codec": "dca",
+        "stream_audio_codec": "aac",
+        "audio_decision": "transcode",
+        "transcode_hw_decoding": 1,
+        "transcode_hw_encoding": 0,
+        "subtitle_codec": "srt",
+        "subtitle_decision": "copy",
+    }
+    output, _ = await invoke("stream_quality", payloads, view="stream", row_id=42)
+    assert "Audio: transcode (DTS → AAC)" in output
+    assert "Video: direct play" in output
+    assert "HW decode: yes" in output
+    assert "HW encode: no" in output
+    assert "Transcode reason:" in output
+    assert "srt" in output
+
+
 async def test_dates_trim_only_leading_zeros_and_align_decisions_by_date(
     payloads: dict[str, Any],
 ) -> None:
@@ -208,8 +292,9 @@ async def test_dates_trim_only_leading_zeros_and_align_decisions_by_date(
         "get_plays_by_stream_type",
     ]
     assert "2024-01-01" not in output
-    assert "2024-01-03 00:00:" in output
-    assert "2024-01-05 00:00:" in output
+    assert "2024-01-03:" in output
+    assert "2024-01-05:" in output
+    assert "00:00" not in output
     assert "Total: 6 plays | Average: 1.50 plays" in output
     assert "TV: 3 | Movies: 2 | Music: 1" in output
     date_lines = [line for line in output.splitlines() if line.startswith("2024")]
@@ -282,7 +367,8 @@ async def test_numeric_date_labels_are_readable(payloads: dict[str, Any]) -> Non
         data = payloads[command]["response"]["data"]
         data["categories"] = ["1704067200", "1704153600", "1704240000", "1704326400", "1704412800"]
     output, _ = await invoke("viewing_patterns", payloads)
-    assert "2024-01-02 00:00:" in output
+    assert "2024-01-02:" in output
+    assert "00:00" not in output
     assert "1704153600" not in output
 
 
