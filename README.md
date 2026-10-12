@@ -26,6 +26,8 @@ All tools are read-only. Use rating keys returned by `search` or `recently_added
 Outputs use compact readable lines, human-readable watch times, and bracketed chaining
 IDs (for example, `[rating_key: 42]`). Missing fields are omitted. Timestamps are displayed
 as `YYYY-MM-DD HH:MM` in `TZ`, falling back to UTC for an unset or invalid timezone.
+Calendar dates (release dates and daily chart labels) use `YYYY-MM-DD` without a time.
+Episode titles share the format `Show — S01E02 "Title"` across tools.
 Enum parameters advertise their allowed values in the MCP input schemas.
 
 `history` defaults to 10 entries (maximum 50); optional stream enrichment is parallel and
@@ -35,6 +37,11 @@ includes all media types unless filtered. `top_content` defaults to TV ranked by
 its `platforms`, `resolution`, and `stream` views show platform watch time, source versus
 delivered resolutions, and detailed stream decisions respectively. The `stream` view
 requires a history `row_id` or active `session_key`.
+Hardware decode/encode flags use `yes`/`no`, or the supplied device name. Stream details
+include subtitle decisions/codecs and explicit transcode reasons when available, otherwise
+short hints derived from codec or resolution changes and subtitle burn-in.
+`viewing_patterns` counts one breakdown per bar, not both media and stream-type series;
+the reported total is the sum of its bars.
 
 ## Configuration
 

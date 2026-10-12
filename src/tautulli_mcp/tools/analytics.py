@@ -9,10 +9,11 @@ from pydantic import Field
 from tautulli_mcp.formatting import (
     clamp,
     enum_error,
+    format_date,
     format_duration,
     format_timestamp,
+    format_title,
     identifiers,
-    media_title,
     number,
     rows,
     stream_details,
@@ -114,6 +115,17 @@ def _amount(entry: dict[str, Any], graph: bool) -> float:
     return _plays(entry)
 
 
+def _pattern_amount(entry: dict[str, Any], graph: bool) -> float:
+    if not graph:
+        return _plays(entry)
+    media_keys = ("tv", "television", "movies", "movie", "music")
+    if any(key in entry for key in media_keys):
+        return sum(number(entry.get(key)) for key in media_keys)
+    if any(key in entry for key in ("direct_play", "dp", "direct_stream", "ds", "tc", "transcode")):
+        return sum(_decisions(entry))
+    return _plays(entry)
+
+
 def _decision_counts(entry: dict[str, Any], *, full: bool = False) -> str:
     dp, ds, tc = _decisions(entry)
     if full:
@@ -140,7 +152,7 @@ def _watch_time(entry: dict[str, Any], fields: tuple[str, ...]) -> str:
 
 def _chart(title: str, data: Any, *, trim_dates: bool = False, streams: Any = None) -> str:
     entries = _graph_rows(data)
-    values = [(entry, _amount(entry, _is_graph(data))) for entry in entries]
+    values = [(entry, _pattern_amount(entry, _is_graph(data))) for entry in entries]
     if trim_dates:
         first = next((index for index, (_, amount) in enumerate(values) if amount > 0), len(values))
         if values and first == len(values):
@@ -158,17 +170,31 @@ def _chart(title: str, data: Any, *, trim_dates: bool = False, streams: Any = No
                 media_totals[key] = number(media_totals.get(key)) + number(entry[key])
     if breakdown := _media_counts(media_totals):
         lines.append(breakdown.replace(" / ", " | "))
-    stream_map = {_label(entry): entry for entry in _graph_rows(streams)}
-    for index, (entry, amount) in enumerate(values):
+
+    def chart_label(entry: dict[str, Any]) -> str:
         label = _label(entry)
+        return (format_date(label) or label) if trim_dates else label
+
+    stream_map = {chart_label(entry): entry for entry in _graph_rows(streams)}
+    for index, (entry, amount) in enumerate(values):
+        label = chart_label(entry)
         bar = "█" * min(30, round(amount / max(peak, 1) * 30))
         counts = (
-            _decision_counts(stream_map[label]) if label in stream_map else _media_counts(entry)
+            _decision_counts(stream_map[label])
+            if label in stream_map
+            else _media_counts(entry)
+            or (
+                _decision_counts(entry)
+                if any(
+                    key in entry
+                    for key in ("direct_play", "dp", "direct_stream", "ds", "tc", "transcode")
+                )
+                else ""
+            )
         )
         detail = f" | {counts}" if counts else ""
         marker = " ← peak" if index == peak_index and peak > 0 else ""
-        display_label = (format_timestamp(label) or label) if trim_dates else label
-        lines.append(f"{display_label}: {bar} {amount:g}{marker}{detail}")
+        lines.append(f"{label}: {bar} {amount:g}{marker}{detail}")
     return "\n".join(lines)
 
 
@@ -182,7 +208,7 @@ def _ranked(title: str, entries: list[dict[str, Any]], category: str) -> str:
         elif category == "platforms":
             name = text(entry.get("platform")) or text(entry.get("title")) or "Platform"
         else:
-            name = media_title(entry) or "Untitled"
+            name = format_title(entry) or "Untitled"
             year = text(entry.get("year"))
             if category == "movies" and year and f"({year})" not in name:
                 name += f" ({year})"
@@ -331,7 +357,7 @@ def register_analytics_tools(mcp: FastMCP) -> None:
                 latest_title = ""
             latest_title = latest_title or text(entry.get("full_title"))
             latest = (
-                media_title({**entry, "title": latest_title, "full_title": latest_title})
+                format_title({**entry, "title": latest_title, "full_title": latest_title})
                 if latest_title or text(entry.get("grandparent_title"))
                 else ""
             )

@@ -490,3 +490,162 @@ async def test_missing_and_unknown_fields_are_omitted(media_data) -> None:
             assert_private_fields_absent(result)
             for label in ("Player:", "Platform:", "Actors:", "Rating:", "Date:", "Added:"):
                 assert label not in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "released",
+    ["2025-03-04", "2025-03-04T00:00:00Z", "2025-03-04T00:00:00+14:00", 1741046400],
+)
+async def test_item_release_is_a_calendar_date(media_data, monkeypatch, released) -> None:
+    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    media_data["get_metadata"]["originally_available_at"] = released
+    async with media_tools(media_data) as (mcp, ctx, _):
+        result = await (await mcp.get_tool("item_details")).fn(ctx=ctx, rating_key=202)
+    release_line = next(line for line in result.splitlines() if "Originally available:" in line)
+    assert release_line == "Originally available: 2025-03-04"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("release", [None, "unknown", "invalid"])
+async def test_item_missing_release_is_omitted(media_data, release) -> None:
+    media_data["get_metadata"]["originally_available_at"] = release
+    async with media_tools(media_data) as (mcp, ctx, _):
+        result = await (await mcp.get_tool("item_details")).fn(ctx=ctx, rating_key=202)
+    assert "Originally available:" not in result
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("show_present", [True, False])
+async def test_all_media_tools_share_episode_title_format(media_data, show_present) -> None:
+    episode = {
+        "media_type": "episode",
+        "title": "SouthLAnd - Mozambique",
+        "full_title": "SouthLAnd - Mozambique",
+        "parent_media_index": 1,
+        "media_index": 2,
+        "rating_key": 42,
+    }
+    if show_present:
+        episode["grandparent_title"] = "SouthLAnd"
+    media_data["get_activity"] = {"sessions": [episode]}
+    media_data["get_history"] = {"data": [episode]}
+    media_data["search"] = [episode]
+    media_data["get_metadata"] = episode
+    media_data["get_recently_added"] = [episode]
+    async with media_tools(media_data) as (mcp, ctx, _):
+        for name, params in (
+            ("now_playing", {}),
+            ("history", {}),
+            ("search", {"query": "SouthLAnd"}),
+            ("item_details", {"rating_key": 42}),
+            ("recently_added", {}),
+        ):
+            result = await (await mcp.get_tool(name)).fn(ctx=ctx, **params)
+            assert 'SouthLAnd — S01E02 "Mozambique"' in result, name
+            assert "SouthLAnd - Mozambique" not in result, name
+            assert_private_fields_absent(result)
+
+
+@pytest.mark.asyncio
+async def test_history_normalizes_audio_transcode_hardware_and_subtitles(media_data) -> None:
+    media_data["get_stream_data"] = {
+        "session_info": {"transcode_hw_requested": "1", "session_key": 799},
+        "media_info": {
+            "video_codec": "hevc",
+            "stream_video_codec": "hevc",
+            "video_decision": "direct_play",
+            "audio_codec": "dca",
+            "stream_audio_codec": "aac",
+            "audio_decision": "transcode",
+            "subtitle_decision": "burn",
+            "subtitle_codec": "pgs",
+            "transcode_hw_decode": "false",
+            "transcode_hw_encode": "NVIDIA NVENC",
+            "file_reason": "/private/movie.mkv",
+            "ip_reason": "192.0.2.10",
+            "internal_reason": {"file": "/private/movie.mkv", "ip_address": "192.0.2.10"},
+        },
+    }
+    async with media_tools(media_data) as (mcp, ctx, _):
+        result = await (await mcp.get_tool("history")).fn(ctx=ctx, include_stream_details=True)
+    for expected in (
+        "Video: direct play",
+        "Audio: transcode (DTS → AAC)",
+        "Subtitles: burn (pgs)",
+        "HW decode: no",
+        "HW encode: NVIDIA NVENC",
+        "Transcode reason: audio: DTS → AAC; subtitles: burn (pgs)",
+    ):
+        assert expected in result
+    assert "transcode_hw_requested" not in result
+    assert "internal_reason" not in result
+    assert_private_fields_absent(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("explicit", [None, "Audio codec not supported by client"])
+async def test_now_playing_transcode_reason_without_payload_dump(media_data, explicit) -> None:
+    media_data["get_activity"]["sessions"] = [
+        {
+            "title": "Film",
+            "media_type": "movie",
+            "year": 2025,
+            "stream_video_decision": "direct_play",
+            "stream_audio_decision": "transcode",
+            "audio_codec": "dca",
+            "stream_audio_codec": "aac",
+            "stream_audio_reason": explicit,
+            "transcode_hw_requested": True,
+            "file_reason": "/private/movie.mkv",
+            "ip_reason": "192.0.2.10",
+        }
+    ]
+    async with media_tools(media_data) as (mcp, ctx, _):
+        result = await (await mcp.get_tool("now_playing")).fn(ctx=ctx)
+    expected = explicit or "audio: DTS → AAC"
+    assert f"Transcode reason: {expected}" in result
+    assert "Film (2025)" in result
+    assert "HW" not in result
+    assert "Source:" not in result
+    assert "Delivered:" not in result
+    assert_private_fields_absent(result)
+
+
+@pytest.mark.asyncio
+async def test_requested_hardware_alone_is_not_a_transcode_reason(media_data) -> None:
+    media_data["get_activity"]["sessions"] = [
+        {"title": "Film", "transcode_decision": "transcode", "transcode_hw_requested": "1"}
+    ]
+    media_data["get_stream_data"] = {
+        "video_decision": "transcode",
+        "transcode_hw_requested": "1",
+        "transcode_reason": {"file": "/private/movie.mkv", "ip_address": "192.0.2.10"},
+    }
+    async with media_tools(media_data) as (mcp, ctx, _):
+        for name, params in (
+            ("now_playing", {}),
+            ("history", {"include_stream_details": True}),
+        ):
+            result = await (await mcp.get_tool(name)).fn(ctx=ctx, **params)
+            assert "Transcode reason:" not in result
+            assert "HW" not in result
+            assert_private_fields_absent(result)
+
+
+@pytest.mark.asyncio
+async def test_history_shows_codecs_and_derived_decisions_with_missing_fields(media_data) -> None:
+    media_data["get_stream_data"] = {
+        "video_codec": "hevc",
+        "stream_video_codec": "h264",
+        "audio_codec": "dca",
+        "stream_audio_codec": "aac",
+        "subtitle_codec": "pgs",
+    }
+    async with media_tools(media_data) as (mcp, ctx, _):
+        result = await (await mcp.get_tool("history")).fn(ctx=ctx, include_stream_details=True)
+    assert "Video: transcode (hevc → h264)" in result
+    assert "Audio: transcode (DTS → AAC)" in result
+    assert "Subtitles: pgs" in result
+    assert "Transcode reason: video: hevc → h264; audio: DTS → AAC" in result
+    assert_private_fields_absent(result)

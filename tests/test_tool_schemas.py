@@ -1,7 +1,7 @@
 from typing import Any
 
 import pytest
-from fastmcp import Context, FastMCP
+from fastmcp import Client, Context, FastMCP
 from fastmcp.exceptions import ValidationError
 
 from tautulli_mcp.tools import register_tools
@@ -73,6 +73,18 @@ async def test_enum_parameters_expose_every_choice(mcp, tool_name, parameter):
     tool = await mcp.get_tool(tool_name)
     schema = tool.parameters["properties"][parameter]
     assert enum_values(schema) == ENUMS[tool_name, parameter]
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_list_exposes_enums_defaults_and_read_only_annotations(mcp):
+    async with Client(mcp) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+    for (name, parameter), choices in ENUMS.items():
+        schema = tools[name].inputSchema["properties"][parameter]
+        assert enum_values(schema) == choices, f"{name}.{parameter} must expose an enum"
+        assert schema["default"] == DEFAULTS[name][parameter]
+        assert schema["description"].strip()
+    assert all(tool.annotations.readOnlyHint is True for tool in tools.values())
 
 
 @pytest.mark.asyncio
