@@ -50,9 +50,9 @@
     "response": {
       "result": "success",
       "data": {"recordsTotal": 3, "data": [
-        {"friendly_name": "Guest", "username": "guest", "title": "Guest display title", "user_id": 3, "plays": 2, "total_time": 3600, "last_seen": "2024-01-03", "last_played": "Guest Movie"},
+        {"friendly_name": "Guest", "username": "guest", "title": "Guest display title", "row_id": 3, "user_id": 3, "plays": 2, "total_time": 3600, "last_seen": "2024-01-03", "last_played": "Guest Movie"},
         {"friendly_name": "Unused", "plays": 0, "last_seen": 0},
-        {"friendly_name": "Family Room", "username": "internal-user", "title": "Owner display title", "user_id": 2, "plays": "12", "total_time": "36000", "last_seen": "1704153600", "last_played": "Latest Movie", "year": 2024, "media_type": "movie"}
+        {"friendly_name": "Family Room", "username": "internal-user", "title": "Owner display title", "row_id": 4, "history_row_id": 13496, "user_id": 2, "plays": "12", "total_time": "36000", "last_seen": "1704153600", "last_played": "Latest Movie", "year": 2024, "media_type": "movie"}
       ]}
     }
   },

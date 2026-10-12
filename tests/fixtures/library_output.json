@@ -1,7 +1,7 @@
 {
   "get_libraries_table": {
     "data": [
-      {"section_id": "1", "section_name": "Movies", "section_type": "movie", "count": "12", "plays": "30", "last_accessed": "1704067200", "path": "/private/movies"},
+      {"section_id": "1", "section_name": "Movies", "section_type": "movie", "count": "12", "plays": "30", "last_played": "Film", "last_accessed": "1704067200", "path": "/private/movies"},
       {"section_id": 2, "section_name": "Television", "section_type": "show", "count": "4", "parent_count": "9", "child_count": "80", "plays": "200", "last_accessed": 1704067200},
       {"section_id": "3", "section_name": "Music", "section_type": "artist", "count": "5", "parent_count": "20", "child_count": "300", "plays": 0, "last_accessed": null},
       {"section_id": "4", "section_name": "Empty", "section_type": "movie", "count": 0, "plays": 0, "last_accessed": 0}

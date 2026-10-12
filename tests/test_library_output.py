@@ -57,6 +57,28 @@ async def test_overview_has_section_ids_type_counts_plays_and_timestamp():
 
 
 @pytest.mark.asyncio
+async def test_overview_uses_last_accessed_not_last_played_media_title():
+    output, _ = await invoke({})
+    movie_line = next(line for line in output.splitlines() if "Movies [section_id: 1]" in line)
+    assert "Last played: 2024-01-01" in movie_line
+    assert "Film" not in movie_line
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("last_played", [1704067200, "1704067200"])
+async def test_overview_accepts_legacy_numeric_last_played(last_played):
+    output, _ = await invoke({}, {"data": [{"section_name": "Legacy", "last_played": last_played}]})
+    assert "Last played: 2024-01-01" in output
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("title", ["2024-01-01", "1917", "1984"])
+async def test_overview_does_not_treat_last_played_title_as_timestamp(title):
+    output, _ = await invoke({}, {"data": [{"section_name": "Titles", "last_played": title}]})
+    assert output == "Libraries\n • Titles"
+
+
+@pytest.mark.asyncio
 async def test_items_have_total_size_metadata_ids_and_no_paths():
     output, requests = await invoke({"section_id": "1"})
     assert requests[0].url.params["section_id"] == "1"

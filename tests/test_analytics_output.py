@@ -137,8 +137,30 @@ async def test_users_sorted_locally_with_readable_time_and_latest_title(
     assert "Latest: Latest Movie" in output
     assert "Latest: Guest Movie" in output
     assert "Owner display title" not in output and "Guest display title" not in output
+    assert "[row_id: 13496]" in output
+    assert "[row_id: 4]" not in output and "[row_id: 3]" not in output
     assert "1704153600" not in output
     assert "unknown" not in output.lower()
+
+
+async def test_user_stats_history_id_chains_to_stream_data(payloads: dict[str, Any]) -> None:
+    users, _ = await invoke("user_stats", payloads)
+    assert "[row_id: 13496]" in users
+    assert "[row_id: 4]" not in users
+    payloads["get_stream_data"]["response"]["data"]["row_id"] = 13496
+    stream, requests = await invoke("stream_quality", payloads, view="stream", row_id="13496")
+    assert requests[0]["row_id"] == "13496"
+    assert "[row_id: 13496]" in stream
+
+
+async def test_user_stats_omits_user_id_but_retains_other_playback_ids(
+    payloads: dict[str, Any],
+) -> None:
+    users = payloads["get_users_table"]["response"]["data"]["data"]
+    users[:] = [{"title": "Owner", "plays": 1, "row_id": 4, "rating_key": 201, "session_key": 7}]
+    output, _ = await invoke("user_stats", payloads)
+    assert "[row_id:" not in output
+    assert "[rating_key: 201]" in output and "[session_key: 7]" in output
 
 
 async def test_user_last_played_is_a_title_not_a_timestamp(payloads: dict[str, Any]) -> None:

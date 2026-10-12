@@ -50,7 +50,15 @@ def _overview(item: dict[str, Any]) -> str:
             parts.append(f"{number(item[key]):g} {label}")
     if text(item.get("plays", item.get("total_plays"))):
         parts.append(f"{number(item.get('plays', item.get('total_plays'))):g} total plays")
-    last_value = item.get("last_played") or item.get("last_accessed")
+    last_value = item.get("last_accessed")
+    legacy_value = item.get("last_played")
+    if last_value in (None, "", 0, "0") and (
+        isinstance(legacy_value, (int, float))
+        and number(legacy_value) > 0
+        or isinstance(legacy_value, str)
+        and number(legacy_value) >= 100_000_000
+    ):
+        last_value = legacy_value
     last_played = format_timestamp(last_value) if last_value not in (None, "", 0, "0") else ""
     if last_played:
         parts.append(f"Last played: {last_played}")

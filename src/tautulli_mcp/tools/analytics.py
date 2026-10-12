@@ -337,7 +337,10 @@ def register_analytics_tools(mcp: FastMCP) -> None:
             )
             if latest:
                 details.append(f"Latest: {latest}")
-            ids = identifiers(entry)
+            playback_ids = {key: value for key, value in entry.items() if key != "row_id"}
+            if text(entry.get("history_row_id")):
+                playback_ids["row_id"] = entry["history_row_id"]
+            ids = identifiers(playback_ids)
             lines.append(" | ".join(details) + (f" {ids}" if ids else ""))
         return "\n".join(lines) if users else "User stats: no active users."
 
