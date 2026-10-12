@@ -1,0 +1,56 @@
+version: "3.8"
+
+services:
+  tautulli-mcp:
+    image: ghcr.io/rikardronnkvist/tautulli-mcp:latest
+    environment:
+      TAUTULLI_URL: ${TAUTULLI_URL:?set TAUTULLI_URL}
+      TAUTULLI_API_KEY_FILE: /run/secrets/tautulli_api_key
+      TAUTULLI_TLS_VERIFY: ${TAUTULLI_TLS_VERIFY:-true}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL}
+      OIDC_CONFIG_URL: ${OIDC_CONFIG_URL:?set OIDC_CONFIG_URL}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:?set OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+      ALLOWED_SUBJECTS: ${ALLOWED_SUBJECTS:?set ALLOWED_SUBJECTS}
+      JWT_SIGNING_KEY_FILE: /run/secrets/jwt_signing_key
+      STATE_DIR: /data
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PORT: "8000"
+    secrets:
+      - tautulli_api_key
+      - oidc_client_secret
+      - jwt_signing_key
+    volumes:
+      - type: bind
+        source: /mnt/gluster01/tautulli-mcp/data
+        target: /data
+    networks:
+      - traefik-public
+      - tautulli
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.http.routers.tautulli-mcp.rule=Host(`${PUBLIC_HOST:?set PUBLIC_HOST}`)
+        - traefik.http.routers.tautulli-mcp.entrypoints=websecure
+        - traefik.http.routers.tautulli-mcp.tls=true
+        - traefik.http.routers.tautulli-mcp.tls.certresolver=${TRAEFIK_CERT_RESOLVER:?set TRAEFIK_CERT_RESOLVER}
+        - traefik.http.services.tautulli-mcp.loadbalancer.server.port=8000
+
+secrets:
+  tautulli_api_key:
+    external: true
+  oidc_client_secret:
+    external: true
+  jwt_signing_key:
+    external: true
+
+networks:
+  traefik-public:
+    external: true
+  tautulli:
+    external: true
+    name: ${TAUTULLI_NETWORK:?set TAUTULLI_NETWORK}

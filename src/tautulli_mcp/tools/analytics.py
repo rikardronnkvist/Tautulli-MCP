@@ -1,0 +1,284 @@
+"""Top content, user statistics, viewing patterns, and stream quality tools."""
+
+import asyncio
+from typing import Any
+
+from fastmcp import Context, FastMCP
+
+from tautulli_mcp.formatting import clamp, compact_lines, enum_error, rows, text
+from tautulli_mcp.tools.common import client_from_context
+
+TOP_CATEGORIES = ("tv", "movies", "music", "users")
+STAT_TYPES = ("plays", "duration")
+PATTERNS = ("date", "weekday", "hour")
+QUALITY_VIEWS = ("transcode", "platforms", "resolution", "stream")
+HOME_STATS_IDS = {
+    "tv": "top_tv",
+    "movies": "top_movies",
+    "music": "top_music",
+    "users": "top_users",
+}
+
+
+def _chart(title: str, data: Any) -> str:
+    entries = _graph_rows(data, "label")
+    if not entries:
+        return f"{title}: no data."
+    values = []
+    for entry in entries:
+        label = text(
+            entry.get("date")
+            or entry.get("day")
+            or entry.get("weekday")
+            or entry.get("dayofweek")
+            or entry.get("day_name")
+            or entry.get("hour")
+            or entry.get("hourofday")
+            or entry.get("label")
+            or entry.get("stream_type")
+        )
+        try:
+            if _is_graph(data):
+                amount = sum(float(value or 0) for key, value in entry.items() if key != "label")
+            else:
+                amount = float(
+                    entry.get("plays") or entry.get("count") or entry.get("total_plays") or 0
+                )
+        except (TypeError, ValueError):
+            amount = 0
+        values.append((label, amount))
+    peak_index, (_, peak) = max(enumerate(values), key=lambda indexed: indexed[1][1])
+    maximum = max(peak, 1)
+    lines = [title]
+    for index, (label, amount) in enumerate(values):
+        bar = "█" * min(30, round(amount / maximum * 30))
+        marker = " ← peak" if index == peak_index else ""
+        lines.append(f"{label}: {bar} {amount:g}{marker}")
+    return "\n".join(lines)
+
+
+def _series_key(name: Any) -> str:
+    return text(name, "value").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _is_graph(data: Any) -> bool:
+    return (
+        isinstance(data, dict)
+        and isinstance(data.get("categories"), list)
+        and isinstance(data.get("series"), list)
+    )
+
+
+def _graph_rows(data: Any, category_field: str) -> list[dict[str, Any]]:
+    if not _is_graph(data):
+        return rows(data)
+    categories = data["categories"]
+    series = [
+        (_series_key(item.get("name")), item.get("data"))
+        for item in data["series"]
+        if isinstance(item, dict) and isinstance(item.get("data"), list)
+    ]
+    return [
+        {
+            category_field: category,
+            **{name: values[index] for name, values in series if index < len(values)},
+        }
+        for index, category in enumerate(categories)
+    ]
+
+
+def _graph_fields(data: Any, category_field: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
+    if not _is_graph(data):
+        return fallback
+    series_fields = (
+        _series_key(item.get("name"))
+        for item in data["series"]
+        if isinstance(item, dict) and isinstance(item.get("data"), list)
+    )
+    return (category_field, *series_fields)
+
+
+def _number(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def register_analytics_tools(mcp: FastMCP) -> None:
+    @mcp.tool(
+        annotations={"readOnlyHint": True},
+        description=(
+            "Show the top 10 TV, movie, music, or user stats by plays or duration over a "
+            "clamped number of days."
+        ),
+    )
+    async def top_content(
+        ctx: Context, category: str = "movies", stat_type: str = "plays", days: int = 30
+    ) -> str:
+        if category not in TOP_CATEGORIES:
+            return enum_error("category", category, TOP_CATEGORIES)
+        if stat_type not in STAT_TYPES:
+            return enum_error("stat_type", stat_type, STAT_TYPES)
+        data = await client_from_context(ctx).call(
+            "get_home_stats",
+            stat_id=HOME_STATS_IDS[category],
+            stats_type=stat_type,
+            time_range=clamp(days, 1, 365),
+        )
+        return compact_lines(
+            f"Top {category} by {stat_type}",
+            rows(data)[:10],
+            ("title", "friendly_name", "user", "total_plays", "plays", "duration"),
+        )
+
+    @mcp.tool(
+        annotations={"readOnlyHint": True},
+        description=(
+            "Show Tautulli user playback totals, watch time, and last-seen time. "
+            "Optionally filter by username."
+        ),
+    )
+    async def user_stats(ctx: Context, user: str | None = None) -> str:
+        data = await client_from_context(ctx).call(
+            "get_users_table", **({"search": user} if user else {})
+        )
+        users = [
+            entry
+            for entry in rows(data)
+            if _number(entry.get("plays") or entry.get("total_plays")) > 0
+        ]
+        return compact_lines(
+            "User stats",
+            users,
+            ("friendly_name", "username", "plays", "total_plays", "total_time", "last_seen"),
+        )
+
+    @mcp.tool(
+        annotations={"readOnlyHint": True},
+        description=(
+            "Visualize playback by date, weekday, or hour as a text bar chart and mark the peak."
+        ),
+    )
+    async def viewing_patterns(ctx: Context, group_by: str = "date", days: int = 30) -> str:
+        if group_by not in PATTERNS:
+            return enum_error("group_by", group_by, PATTERNS)
+        duration = clamp(days, 1, 365)
+        commands = {
+            "date": ("get_plays_by_date", {"time_range": duration}),
+            "weekday": ("get_plays_by_dayofweek", {"time_range": duration}),
+            "hour": ("get_plays_by_hourofday", {"time_range": duration}),
+        }
+        command, params = commands[group_by]
+        client = client_from_context(ctx)
+        data = await client.call(command, **params)
+        if group_by == "date":
+            streams = await client.call("get_plays_by_stream_type", time_range=duration)
+            return (
+                _chart(f"Viewing patterns by {group_by}", data)
+                + "\n\n"
+                + compact_lines(
+                    "Plays by stream type",
+                    _graph_rows(streams, "stream_type"),
+                    _graph_fields(streams, "stream_type", ("stream_type", "plays", "count")),
+                )
+            )
+        return _chart(f"Viewing patterns by {group_by}", data)
+
+    @mcp.tool(
+        annotations={"readOnlyHint": True},
+        description=(
+            "Inspect transcoding, platform and resolution trends, or detailed stream data for "
+            "one history row_id/session_key."
+        ),
+    )
+    async def stream_quality(
+        ctx: Context,
+        view: str = "transcode",
+        days: int = 30,
+        row_id: str | None = None,
+        session_key: str | None = None,
+    ) -> str:
+        if view not in QUALITY_VIEWS:
+            return enum_error("view", view, QUALITY_VIEWS)
+        client = client_from_context(ctx)
+        duration = clamp(days, 1, 365)
+        if view == "stream":
+            if not row_id and not session_key:
+                return "view=stream requires row_id or session_key."
+            params = {"row_id": row_id} if row_id else {"session_key": session_key}
+            data = await client.call("get_stream_data", **params)
+            return compact_lines(
+                "Stream details",
+                rows(data),
+                (
+                    "row_id",
+                    "session_key",
+                    "platform",
+                    "video_codec",
+                    "audio_codec",
+                    "stream_video_decision",
+                    "transcode_decision",
+                    "transcode_decision_string",
+                    "bitrate",
+                ),
+            )
+        if view == "transcode":
+            data = await client.call("get_plays_by_stream_type", time_range=duration)
+            return compact_lines(
+                "Plays by stream type",
+                _graph_rows(data, "stream_type"),
+                _graph_fields(data, "stream_type", ("stream_type", "plays", "count")),
+            )
+        if view == "platforms":
+            platform_data, home_data = await asyncio.gather(
+                client.call("get_stream_type_by_top_10_platforms", time_range=duration),
+                client.call(
+                    "get_home_stats",
+                    stat_id="top_platforms",
+                    stats_type="plays",
+                    time_range=duration,
+                ),
+            )
+            return (
+                compact_lines(
+                    "Stream type by platform",
+                    _graph_rows(platform_data, "platform"),
+                    _graph_fields(
+                        platform_data,
+                        "platform",
+                        ("platform", "direct_play", "direct_stream", "transcode"),
+                    ),
+                )
+                + "\n\n"
+                + compact_lines(
+                    "Top platforms",
+                    rows(home_data)[:10],
+                    ("platform", "title", "plays", "total_plays"),
+                )
+            )
+        source_data, stream_data = await asyncio.gather(
+            client.call("get_plays_by_source_resolution", time_range=duration),
+            client.call("get_plays_by_stream_resolution", time_range=duration),
+        )
+        return (
+            compact_lines(
+                "Plays by source resolution",
+                _graph_rows(source_data, "source_resolution"),
+                _graph_fields(
+                    source_data,
+                    "source_resolution",
+                    ("source_resolution", "resolution", "plays", "count"),
+                ),
+            )
+            + "\n\n"
+            + compact_lines(
+                "Plays by stream resolution",
+                _graph_rows(stream_data, "stream_resolution"),
+                _graph_fields(
+                    stream_data,
+                    "stream_resolution",
+                    ("stream_resolution", "resolution", "plays", "count"),
+                ),
+            )
+        )

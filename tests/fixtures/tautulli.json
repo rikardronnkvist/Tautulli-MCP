@@ -1,0 +1,162 @@
+{
+  "get_activity": {
+    "sessions": [
+      {
+        "session_key": "session-1",
+        "full_title": "Example Movie",
+        "friendly_name": "Owner",
+        "progress_percent": 35,
+        "stream_video_decision": "transcode",
+        "transcode_decision": "bandwidth limit"
+      }
+    ],
+    "lan_bandwidth": 100
+  },
+  "get_history": [
+    {
+      "row_id": 7,
+      "full_title": "Example Movie",
+      "ip_address": "192.0.2.10"
+    }
+  ],
+  "get_stream_data": {
+    "row_id": 7,
+    "session_key": "session-1",
+    "video_codec": "h264",
+    "audio_codec": "aac",
+    "bitrate": 4000
+  },
+  "search": {
+    "results_count": 1,
+    "results_list": {
+      "movie": [
+        {
+          "title": "Example Movie",
+          "rating_key": "42"
+        }
+      ]
+    }
+  },
+  "get_metadata": {
+    "title": "Example Movie",
+    "year": 2024,
+    "file": "/private/library/example.mkv"
+  },
+  "get_item_watch_time_stats": {
+    "total_plays": 4,
+    "total_plays_24": 1,
+    "total_plays_7": 2,
+    "total_plays_30": 4,
+    "total_time": "2 hours"
+  },
+  "get_item_user_stats": [],
+  "get_recently_added": [
+    {
+      "rating_key": "42",
+      "title": "Example Movie",
+      "year": 2024
+    }
+  ],
+  "get_libraries_table": [
+    {
+      "section_id": 1,
+      "section_name": "Movies",
+      "count": 1
+    }
+  ],
+  "get_library_media_info": [
+    {
+      "rating_key": "42",
+      "title": "Example Movie",
+      "play_count": 2
+    }
+  ],
+  "get_home_stats": [
+    {
+      "title": "Example Movie",
+      "total_plays": 8
+    }
+  ],
+  "get_users_table": [
+    {
+      "friendly_name": "Owner",
+      "plays": 3,
+      "total_time": "1 hour"
+    },
+    {
+      "friendly_name": "Unused",
+      "plays": 0
+    }
+  ],
+  "get_plays_by_date": {
+    "categories": ["2026-01-01", "2026-01-02"],
+    "series": [
+      {
+        "name": "Movies",
+        "data": [2, 3]
+      },
+      {
+        "name": "TV",
+        "data": [1, 2]
+      }
+    ]
+  },
+  "get_plays_by_dayofweek": {
+    "categories": ["Monday", "Tuesday"],
+    "series": [
+      {
+        "name": "Plays",
+        "data": [3, 7]
+      }
+    ]
+  },
+  "get_plays_by_hourofday": {
+    "categories": ["09:00", "10:00"],
+    "series": [
+      {
+        "name": "Plays",
+        "data": [4, 6]
+      }
+    ]
+  },
+  "get_plays_by_stream_type": {
+    "categories": ["Direct Play", "Transcode"],
+    "series": [
+      {
+        "name": "Plays",
+        "data": [5, 2]
+      }
+    ]
+  },
+  "get_stream_type_by_top_10_platforms": {
+    "categories": ["Web", "Roku"],
+    "series": [
+      {
+        "name": "Direct Play",
+        "data": [5, 3]
+      },
+      {
+        "name": "Transcode",
+        "data": [1, 2]
+      }
+    ]
+  },
+  "get_plays_by_source_resolution": {
+    "categories": ["1080", "4k"],
+    "series": [
+      {
+        "name": "Plays",
+        "data": [8, 2]
+      }
+    ]
+  },
+  "get_plays_by_stream_resolution": {
+    "categories": ["1080", "720"],
+    "series": [
+      {
+        "name": "Plays",
+        "data": [6, 4]
+      }
+    ]
+  }
+}
