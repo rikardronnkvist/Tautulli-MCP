@@ -174,14 +174,59 @@ async def test_history_filters_ip_and_limit(media_data) -> None:
             start_date="2024-01-01",
             include_ip=True,
         )
-    params = requests[0].url.params
+    history = [r for r in requests if r.url.params["cmd"] == "get_history"]
+    assert len(history) == 1
+    params = history[0].url.params
     assert params["length"] == "50"
     assert params["user"] == "Alice"
     assert params["media_type"] == "episode"
     assert params["search"] == "Space"
-    assert params["start_date"] == "2024-01-01"
+    assert params["after"] == "2024-01-01"
+    assert "start_date" not in params
     assert "IP: 192.0.2.11" in result
-    assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_history_date_range_maps_to_after_and_before(media_data) -> None:
+    async with media_tools(media_data) as (mcp, ctx, requests):
+        await (await mcp.get_tool("history")).fn(
+            ctx=ctx, start_date="2026-07-01", end_date="2026-10-12"
+        )
+    params = requests[0].url.params
+    assert params["after"] == "2026-07-01"
+    assert params["before"] == "2026-10-12"
+    assert "start_date" not in params
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "given", ["Rikard Rönnkvist", "rikard rönnkvist", "rikardr", "rikard@x.test"]
+)
+async def test_history_resolves_friendly_name_to_user_id(media_data, given) -> None:
+    media_data["get_users_table"] = {
+        "data": [
+            {
+                "user_id": 7,
+                "friendly_name": "Rikard Rönnkvist",
+                "username": "rikardr",
+                "email": "rikard@x.test",
+            },
+            {"user_id": 8, "friendly_name": "Someone Else", "username": "other"},
+        ]
+    }
+    async with media_tools(media_data) as (mcp, ctx, requests):
+        await (await mcp.get_tool("history")).fn(ctx=ctx, user=given)
+    params = next(r for r in requests if r.url.params["cmd"] == "get_history").url.params
+    assert params["user_id"] == "7"
+    assert "user" not in params
+
+
+@pytest.mark.asyncio
+async def test_history_numeric_user_is_user_id_without_lookup(media_data) -> None:
+    async with media_tools(media_data) as (mcp, ctx, requests):
+        await (await mcp.get_tool("history")).fn(ctx=ctx, user="42")
+    assert [r.url.params["cmd"] for r in requests] == ["get_history"]
+    assert requests[0].url.params["user_id"] == "42"
 
 
 @pytest.mark.asyncio
