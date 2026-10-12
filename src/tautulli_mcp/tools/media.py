@@ -187,6 +187,34 @@ def _public_ids(record: dict[str, Any]) -> str:
     return _line(*(f"{provider.upper()}: {value}" for provider, value in found.items()))
 
 
+async def _resolve_user_filter(client: Any, user: str) -> dict[str, Any]:
+    """Map a display name, username, email or numeric ID to Tautulli history params.
+
+    Tautulli's ``user`` parameter only matches the Plex username column, so names as shown
+    by other tools (friendly names) never match. Resolve to ``user_id`` whenever possible.
+    """
+    value = user.strip()
+    if value.isdigit():
+        return {"user_id": value}
+    try:
+        data = await client.call("get_users_table", length=1000)
+    except RuntimeError:
+        data = None
+    needle = value.casefold()
+    matches = {
+        text(entry.get("user_id"))
+        for entry in rows(data)
+        if text(entry.get("user_id"))
+        and any(
+            text(entry.get(key)).casefold() == needle
+            for key in ("friendly_name", "username", "email")
+        )
+    }
+    if len(matches) == 1:
+        return {"user_id": matches.pop()}
+    return {"user": value}
+
+
 def register_media_tools(mcp: FastMCP) -> None:
     @mcp.tool(
         annotations={"readOnlyHint": True},
@@ -269,7 +297,12 @@ def register_media_tools(mcp: FastMCP) -> None:
         ] = None,
         search: Annotated[str | None, Field(description="Optional title search filter.")] = None,
         start_date: Annotated[
-            str | None, Field(description="Optional history start date in YYYY-MM-DD format.")
+            str | None,
+            Field(description="Only history on or after this date (YYYY-MM-DD)."),
+        ] = None,
+        end_date: Annotated[
+            str | None,
+            Field(description="Only history on or before this date (YYYY-MM-DD)."),
         ] = None,
         include_stream_details: Annotated[
             bool, Field(description="Fetch stream details in parallel for at most 10 entries.")
@@ -281,15 +314,18 @@ def register_media_tools(mcp: FastMCP) -> None:
         if media_type is not None and media_type not in HISTORY_TYPES:
             return enum_error("media_type", media_type, HISTORY_TYPES)
         params: dict[str, Any] = {"length": clamp(length, 1, 50)}
+        # Tautulli's start_date means "exactly this day"; after/before are inclusive bounds.
         for key, value in (
-            ("user", user),
             ("media_type", media_type),
             ("search", search),
-            ("start_date", start_date),
+            ("after", start_date),
+            ("before", end_date),
         ):
             if text(value):
                 params[key] = value
         client = client_from_context(ctx)
+        if text(user):
+            params.update(await _resolve_user_filter(client, user))
         data = await client.call("get_history", **params)
         entries = rows(data)
         if include_stream_details:
