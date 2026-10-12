@@ -112,8 +112,8 @@ def test_search_clamps_limit_and_includes_chaining_rating_key() -> None:
 
     assert fake.calls[0] == ("search", {"query": "Example", "limit": 50})
     assert "[rating_key: 42]" in result
-    assert "Movie: Example [rating_key: 42]" in result
-    assert "Show: Example Show [rating_key: 43]" in result
+    assert "Movie: Example | [rating_key: 42]" in result
+    assert "Show: Example Show | [rating_key: 43]" in result
 
 
 def test_top_content_clamps_days_and_maps_category() -> None:
@@ -174,7 +174,7 @@ def test_library_uses_tautulli_order_column_and_sort_title() -> None:
         get_tool(mcp, "library").fn(ctx=tool_context(fake), section_id="1", order_by="sort_title")
     )
 
-    assert result == "Library section 1"
+    assert result == "Library [section_id: 1]"
     assert fake.calls == [
         (
             "get_library_media_info",
@@ -254,12 +254,12 @@ async def test_all_tools_with_respx_responses_from_json_fixture() -> None:
     assert "[row_id: 7]" in results["history"]
     assert "[rating_key: 42]" in results["search"]
     assert "/private/library" not in results["item_details"]
-    assert "24h: 1 plays" in results["item_details"]
-    assert "7d: 2 plays" in results["item_details"]
-    assert "30d: 4 plays" in results["item_details"]
+    assert "24h | Plays: 1" in results["item_details"]
+    assert "7d | Plays: 2" in results["item_details"]
+    assert "30d | Plays: 4" in results["item_details"]
     assert "[section_id: 1]" in results["library"]
     assert "peak" in results["viewing_patterns"]
-    assert "2026-01-01:" in results["viewing_patterns"]
+    assert "2026-01-01 00:00:" in results["viewing_patterns"]
     assert "5 ← peak" in results["viewing_patterns"]
     assert "DP" in results["viewing_patterns"]
     assert "7 ← peak" in results["weekday_patterns"]

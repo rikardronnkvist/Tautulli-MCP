@@ -89,6 +89,8 @@ async def test_now_playing_two_sessions(media_data) -> None:
         "LAN: 8000 kbps",
         "WAN: 4000 kbps",
         "Total: 12000 kbps",
+        "Progress: 25% | 15m / 1h",
+        "Progress: 50.0% | 1h / 2h",
     ):
         assert value in result
     assert "direct play" in result.lower()
@@ -96,6 +98,10 @@ async def test_now_playing_two_sessions(media_data) -> None:
     assert len([line for line in result.splitlines() if line.startswith(" • ")]) == 2
     assert result.count("[session_key: 701]") == 1
     assert result.count("[session_key: 702]") == 1
+    assert len(result.splitlines()) == 4
+    assert "Source:" not in result
+    assert "Delivered:" not in result
+    assert "Space Show - The Arrival" not in result
     assert requests[0].url.params["cmd"] == "get_activity"
     assert_private_fields_absent(result)
 
@@ -129,7 +135,9 @@ async def test_history_details_and_totals(media_data, monkeypatch) -> None:
         "Matching records: 2",
         "Total watch time:",
         "Filtered watch time:",
-        "Duration:",
+        "Duration: 30m",
+        "Duration: 1h",
+        "Total watch time: 3h",
         "hevc",
         "h264",
         "Bandwidth limit",
@@ -138,6 +146,19 @@ async def test_history_details_and_totals(media_data, monkeypatch) -> None:
     assert "Duration: 1800" not in result
     assert "Total watch time: 10800" not in result
     assert_private_fields_absent(result)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("title", [None, "unknown"])
+async def test_episode_full_title_fallback_does_not_repeat_show(media_data, title) -> None:
+    media_data["get_activity"]["sessions"][0]["title"] = title
+    media_data["get_history"]["data"][0]["title"] = title
+    async with media_tools(media_data) as (mcp, ctx, _):
+        for name in ("now_playing", "history"):
+            result = await (await mcp.get_tool(name)).fn(ctx=ctx)
+            assert 'Space Show — S01E02 "The Arrival"' in result
+            assert "Space Show - The Arrival" not in result
+            assert_private_fields_absent(result)
 
 
 @pytest.mark.asyncio
@@ -269,7 +290,7 @@ async def test_item_metadata_media_info_and_statistics(media_data, monkeypatch) 
         "[rating_key: 202]",
         "Cinema",
         "2025-03-04",
-        "Duration:",
+        "Duration: 2h",
         "Science Fiction",
         "Adventure",
         "Director One",
@@ -280,7 +301,7 @@ async def test_item_metadata_media_info_and_statistics(media_data, monkeypatch) 
         "Audio: truehd",
         "Channels: 7.1",
         "Container: mkv",
-        "Size:",
+        "Size: 1.0 GiB",
         "HDR10",
         "Dolby Vision",
         "IMDB: tt1234567",
@@ -343,6 +364,24 @@ async def test_item_single_media_info_and_legacy_stats(media_data) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("as_list", [False, True])
+async def test_item_wrapped_metadata_and_invalid_stat_periods(media_data, as_list) -> None:
+    item = media_data["get_metadata"]
+    media_data["get_metadata"] = {"metadata": [item] if as_list else item}
+    media_data["get_item_watch_time_stats"].extend(
+        {"query_days": period, "total_plays": "99", "total_time": "1"}
+        for period in (None, "unknown", "invalid", "-1")
+    )
+    async with media_tools(media_data) as (mcp, ctx, _):
+        result = await (await mcp.get_tool("item_details")).fn(ctx=ctx, rating_key=202)
+    assert "The Film (2025)" in result
+    assert "Resolution: 4k" in result
+    assert "Plays: 99" not in result
+    assert "all time | Plays: 12" in result
+    assert_private_fields_absent(result)
+
+
+@pytest.mark.asyncio
 async def test_recently_added_all_types_and_filter(media_data, monkeypatch) -> None:
     monkeypatch.setenv("TZ", "UTC")
     async with media_tools(media_data) as (mcp, ctx, requests):
@@ -361,6 +400,9 @@ async def test_recently_added_all_types_and_filter(media_data, monkeypatch) -> N
         "[rating_key: 200]",
         "[rating_key: 300]",
         "Added: 2024-01-01 00:00",
+        "Library: Cinema",
+        "Library: Television",
+        "Library: Music",
     ):
         assert value in result
     artist_line = next(line for line in result.splitlines() if "The Artist" in line)

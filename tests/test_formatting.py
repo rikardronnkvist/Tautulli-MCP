@@ -126,3 +126,11 @@ def test_stream_info_is_allowlisted_and_handles_nested_payload():
     assert format_size("10.12 GB") == "10.12 GB"
     assert format_size("unknown") == ""
     assert format_size("not a size") == ""
+
+
+def test_stream_details_accepts_actual_full_resolution_fields():
+    output = stream_details(
+        {"video_full_resolution": "4k", "stream_video_full_resolution": "1080p"}
+    )
+    assert "Source: 4k" in output
+    assert "Delivered: 1080p" in output

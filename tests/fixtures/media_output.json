@@ -5,6 +5,7 @@
         "media_type": "episode",
         "grandparent_title": "Space Show",
         "title": "The Arrival",
+        "full_title": "Space Show - The Arrival",
         "parent_media_index": "1",
         "media_index": "2",
         "friendly_name": "Alice",
@@ -76,6 +77,7 @@
         "media_type": "episode",
         "grandparent_title": "Space Show",
         "title": "The Arrival",
+        "full_title": "Space Show - The Arrival",
         "parent_media_index": "1",
         "media_index": "2",
         "friendly_name": "Alice",
@@ -180,9 +182,9 @@
   ],
   "get_recently_added": {
     "recently_added": [
-      {"media_type": "movie", "title": "The Film", "year": "2025", "rating_key": "202", "added_at": "1704067200"},
-      {"media_type": "show", "title": "Space Show", "rating_key": "200", "added_at": "1704070800"},
-      {"media_type": "artist", "title": "The Artist", "rating_key": "300", "added_at": null}
+      {"media_type": "movie", "title": "The Film", "year": "2025", "rating_key": "202", "library_name": "Cinema", "added_at": "1704067200"},
+      {"media_type": "show", "title": "Space Show", "rating_key": "200", "section_name": "Television", "added_at": "1704070800"},
+      {"media_type": "artist", "title": "The Artist", "rating_key": "300", "library_name": "Music", "added_at": null}
     ]
   }
 }

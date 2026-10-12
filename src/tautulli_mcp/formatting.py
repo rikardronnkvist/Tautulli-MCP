@@ -115,10 +115,16 @@ def identifiers(record: Mapping[str, Any]) -> str:
 
 
 def media_title(record: Mapping[str, Any]) -> str:
-    title = text(record.get("title") or record.get("full_title"))
+    title = text(record.get("title")) or text(record.get("full_title"))
     kind = record.get("media_type") or record.get("type")
     if kind == "episode":
         show = text(record.get("grandparent_title"))
+        if not text(record.get("title")) and show:
+            for separator in (" - ", " — "):
+                prefix = f"{show}{separator}"
+                if title.startswith(prefix):
+                    title = title[len(prefix) :].strip()
+                    break
         season = record.get("parent_media_index")
         episode = record.get("media_index")
         index = ""
@@ -153,6 +159,8 @@ def stream_details(record: Mapping[str, Any]) -> str:
     merged = dict(record)
     for key in ("session_info", "media_info"):
         nested = record.get(key)
+        if isinstance(nested, list):
+            nested = next((item for item in nested if isinstance(item, Mapping)), None)
         if isinstance(nested, Mapping):
             merged.update(nested)
     record = merged
@@ -167,9 +175,9 @@ def stream_details(record: Mapping[str, Any]) -> str:
             parts.append(container)
         for keys in (
             (prefix + "video_codec",) if delivered else ("video_codec", "source_video_codec"),
-            (prefix + "video_resolution",)
+            (prefix + "video_full_resolution", prefix + "video_resolution")
             if delivered
-            else ("video_resolution", "source_resolution"),
+            else ("video_full_resolution", "video_resolution", "source_resolution"),
         ):
             if value := first(*keys):
                 parts.append(value)

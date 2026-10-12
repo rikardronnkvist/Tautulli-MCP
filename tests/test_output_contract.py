@@ -42,7 +42,7 @@ async def test_tools_omit_missing_noise_and_epoch_values(monkeypatch, tool_name,
 
     def add_fields(data):
         if isinstance(data, dict):
-            for key, value in list(data.items()):
+            for value in list(data.values()):
                 if isinstance(value, (dict, list)):
                     add_fields(value)
             if any(key in data for key in ("title", "full_title", "friendly_name", "section_name")):

@@ -95,9 +95,13 @@ def _watch_stats(data: Any) -> list[str]:
     labels = {1: "24h", 7: "7d", 30: "30d", 0: "all time"}
     for record in rows(data):
         if "query_days" in record:
-            label = labels.get(number(record["query_days"])) if text(record["query_days"]) else ""
-            if not label and text(record["query_days"]):
-                label = f"{text(record['query_days'])}d"
+            try:
+                days = int(record["query_days"])
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if days < 0:
+                continue
+            label = labels.get(days, f"{days}d")
             plays = _field("Plays", _first(record, "total_plays", "plays"))
             duration = _field("Watch time", _duration(_first(record, "total_time", "duration")))
             if plays or duration:
@@ -188,7 +192,7 @@ def register_media_tools(mcp: FastMCP) -> None:
             progress = _first(session, "progress_percent", "percent_complete")
             offset = session.get("view_offset")
             duration = session.get("duration")
-            if progress is None and offset is not None and number(duration) > 0:
+            if progress is None and text(offset) and number(duration) > 0:
                 progress = round(number(offset) / number(duration) * 100, 1)
             position = _line(
                 f"{text(progress)}%" if progress is not None else "",
@@ -210,7 +214,10 @@ def register_media_tools(mcp: FastMCP) -> None:
                     _field("Platform", session.get("platform")),
                     _field("Quality", session.get("quality_profile")),
                     _field("Mode", playback_decision(session)),
-                    _technical_details(session),
+                    _field(
+                        "Transcode reason",
+                        _first(session, "transcode_reason", "transcode_decision_string"),
+                    ),
                     identifiers(session),
                 )
             )
@@ -385,6 +392,8 @@ def register_media_tools(mcp: FastMCP) -> None:
             client.call("get_item_watch_time_stats", rating_key=key),
             client.call("get_item_user_stats", rating_key=key),
         )
+        if isinstance(metadata, dict) and isinstance(metadata.get("metadata"), (dict, list)):
+            metadata = metadata["metadata"]
         items = rows(metadata)
         record = items[0] if items else {}
         lines = [
@@ -462,6 +471,7 @@ def register_media_tools(mcp: FastMCP) -> None:
                 + _line(
                     media_title(item),
                     _field("Type", _first(item, "media_type", "type")),
+                    _field("Library", _first(item, "library_name", "section_name")),
                     _field("Added", format_timestamp(item.get("added_at"))),
                     identifiers(item),
                 )

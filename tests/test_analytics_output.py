@@ -104,8 +104,28 @@ async def test_users_sorted_locally_with_readable_time_and_latest_title(
     assert "10h" in output
     assert "Last seen: 2024-01-02" in output
     assert "Latest: Latest Movie" in output
+    assert "Latest: Guest Movie" in output
+    assert "Owner display title" not in output and "Guest display title" not in output
     assert "1704153600" not in output
     assert "unknown" not in output.lower()
+
+
+async def test_user_last_played_is_a_title_not_a_timestamp(payloads: dict[str, Any]) -> None:
+    users = payloads["get_users_table"]["response"]["data"]["data"]
+    users[:] = [
+        {"title": "User Display Title", "plays": 2, "last_played": "The Latest Media Title"},
+        {
+            "title": "Another User",
+            "plays": 1,
+            "last_seen": "2024-01-03",
+            "full_title": "Fallback Media Title",
+        },
+    ]
+    output, _ = await invoke("user_stats", payloads)
+    assert "User Display Title — 2 plays" in output
+    assert "Latest: The Latest Media Title" in output
+    assert "Latest: Fallback Media Title" in output
+    assert output.count("Last seen:") == 1
 
 
 async def test_dates_trim_only_leading_zeros_and_align_decisions_by_date(
@@ -117,8 +137,8 @@ async def test_dates_trim_only_leading_zeros_and_align_decisions_by_date(
         "get_plays_by_stream_type",
     ]
     assert "2024-01-01" not in output
-    assert "2024-01-03:" in output
-    assert "2024-01-05:" in output
+    assert "2024-01-03 00:00:" in output
+    assert "2024-01-05 00:00:" in output
     assert "Total: 6 plays | Average: 1.50 plays" in output
     assert "TV: 3 | Movies: 2 | Music: 1" in output
     date_lines = [line for line in output.splitlines() if line.startswith("2024")]
@@ -144,16 +164,46 @@ async def test_other_groupings_keep_empty_categories(
     assert f"{first}:" in output
     assert f"Average: {average} plays" in output
     assert "DP " not in output
+    assert " / Movies:" in output
+    bar_line = next(line for line in output.splitlines() if "█" in line)
+    assert bar_line.index("█") < bar_line.index("TV:")
 
 
-async def test_zero_dates_are_retained_and_safe(payloads: dict[str, Any]) -> None:
+async def test_all_zero_dates_report_no_plays_without_noisy_rows(payloads: dict[str, Any]) -> None:
     data = payloads["get_plays_by_date"]["response"]["data"]
     for series in data["series"]:
         series["data"] = [0] * len(data["categories"])
     output, _ = await invoke("viewing_patterns", payloads)
-    assert "2024-01-01:" in output
+    assert "2024-01-01" not in output
+    assert "Total: 0 plays | Average: 0.00 plays" in output
+    assert "No plays in this date range." in output
+    assert "DP " not in output
+    assert "← peak" not in output
+
+
+@pytest.mark.parametrize(
+    ("group", "command"),
+    [("weekday", "get_plays_by_dayofweek"), ("hour", "get_plays_by_hourofday")],
+)
+async def test_all_zero_weekday_and_hour_keep_categories(
+    payloads: dict[str, Any], group: str, command: str
+) -> None:
+    graph = payloads[command]["response"]["data"]
+    for series in graph["series"]:
+        series["data"] = [0] * len(graph["categories"])
+    output, _ = await invoke("viewing_patterns", payloads, group_by=group)
+    assert all(f"{category}:" in output for category in graph["categories"])
     assert "Total: 0 plays | Average: 0.00 plays" in output
     assert "← peak" not in output
+
+
+async def test_chart_only_reports_media_series_present(payloads: dict[str, Any]) -> None:
+    graph = payloads["get_plays_by_dayofweek"]["response"]["data"]
+    graph["series"] = graph["series"][:1]
+    output, _ = await invoke("viewing_patterns", payloads, group_by="weekday")
+    assert "TV: 4" in output
+    assert "Movies:" not in output and "Music:" not in output
+    assert "Monday:" in output and "| TV: 4" in output
 
 
 async def test_numeric_date_labels_are_readable(payloads: dict[str, Any]) -> None:
@@ -161,7 +211,7 @@ async def test_numeric_date_labels_are_readable(payloads: dict[str, Any]) -> Non
         data = payloads[command]["response"]["data"]
         data["categories"] = ["1704067200", "1704153600", "1704240000", "1704326400", "1704412800"]
     output, _ = await invoke("viewing_patterns", payloads)
-    assert "2024-01-02" in output
+    assert "2024-01-02 00:00:" in output
     assert "1704153600" not in output
 
 
@@ -171,10 +221,10 @@ async def test_transcode_uses_platform_graph_and_weighted_overall(
     output, requests = await invoke("stream_quality", payloads)
     assert len(requests) == 1
     assert requests[0]["cmd"] == "get_stream_type_by_top_10_platforms"
-    assert "Roku — 10 plays | DP 6 / DS 2 / TC 2 | TC 20.0%" in output
-    assert "Web — 5 plays | DP 0 / DS 1 / TC 4 | TC 80.0%" in output
-    assert "Unused — 0 plays | DP 0 / DS 0 / TC 0 | TC 0.0%" in output
-    assert "Overall — 15 plays | DP 6 / DS 3 / TC 6 | TC 40.0%" in output
+    assert "Roku — 10 plays | direct play 6 / direct stream 2 / transcode 2 | TC 20.0%" in output
+    assert "Web — 5 plays | direct play 0 / direct stream 1 / transcode 4 | TC 80.0%" in output
+    assert "Unused — 0 plays | direct play 0 / direct stream 0 / transcode 0 | TC 0.0%" in output
+    assert "Overall — 15 plays | direct play 6 / direct stream 3 / transcode 6 | TC 40.0%" in output
 
 
 async def test_platforms_only_requests_home_stats_with_watch_time(
@@ -197,7 +247,7 @@ async def test_resolution_sections_and_supported_down_transcoding(
         "get_plays_by_stream_resolution",
     }
     assert "Source resolutions" in output and "Delivered resolutions" in output
-    assert "4k — 5 plays | DP 2 / DS 0 / TC 3" in output
+    assert "4k — 5 plays | direct play 2 / direct stream 0 / transcode 3" in output
     assert "4K sources were down-transcoded" in output
 
 
@@ -215,6 +265,11 @@ async def test_resolution_does_not_claim_down_transcoding_without_evidence(
         source["series"][2]["data"] = [0, 2]
     output, _ = await invoke("stream_quality", payloads, view="resolution")
     assert "down-transcoded" not in output
+    if ambiguous == "4k-delivery":
+        assert "aggregate counts suggest" in output
+        assert "do not establish individual stream paths" in output
+    else:
+        assert "down-transcoding" not in output
 
 
 @pytest.mark.parametrize(
@@ -236,6 +291,7 @@ async def test_stream_numeric_ids_and_shared_details(
     assert ("session_key" if parameter == "row_id" else "row_id") not in requests[0]
     assert "Example Movie" in output
     assert "hevc" in output.lower() and "h264" in output.lower()
+    assert "4K" in output and "1080p" in output
     assert "truehd" in output.lower() and "aac" in output.lower()
     assert "[rating_key: 201]" in output and "[row_id: 42]" in output
     assert output.count("Example Movie") == 1

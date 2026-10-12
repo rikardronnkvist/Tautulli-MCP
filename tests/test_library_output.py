@@ -61,6 +61,7 @@ async def test_items_have_total_size_metadata_ids_and_no_paths():
     output, requests = await invoke({"section_id": "1"})
     assert requests[0].url.params["section_id"] == "1"
     header, *lines = output.splitlines()
+    assert "[section_id: 1]" in header
     assert "Total library size: 3" in header
     assert "GB" in header or "GiB" in header
     assert "Example Film" in lines[0]
@@ -119,7 +120,7 @@ async def test_invalid_arguments_do_not_call_api(arguments, error):
 @pytest.mark.asyncio
 async def test_empty_items_do_not_render_response_metadata_as_an_item():
     output, _ = await invoke({"section_id": 1, "length": 0}, {"total_file_size": None})
-    assert output == "Library section 1"
+    assert output == "Library [section_id: 1]"
 
 
 @pytest.mark.asyncio
@@ -168,4 +169,10 @@ async def test_unknown_counts_and_sizes_are_omitted_not_fabricated():
             "data": [{"title": "Sparse", "file_size": "unknown", "play_count": "UNKNOWN"}],
         },
     )
-    assert output == "Library section 1\n • Sparse"
+    assert output == "Library [section_id: 1]\n • Sparse"
+
+
+@pytest.mark.asyncio
+async def test_numeric_total_library_size_is_still_formatted():
+    output, _ = await invoke({"section_id": 1}, {"total_file_size": "3221225472", "data": []})
+    assert output == "Library [section_id: 1] | Total library size: 3.0 GiB"

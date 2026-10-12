@@ -114,40 +114,56 @@ def _amount(entry: dict[str, Any], graph: bool) -> float:
     return _plays(entry)
 
 
-def _decision_counts(entry: dict[str, Any]) -> str:
+def _decision_counts(entry: dict[str, Any], *, full: bool = False) -> str:
     dp, ds, tc = _decisions(entry)
+    if full:
+        return f"direct play {dp:g} / direct stream {ds:g} / transcode {tc:g}"
     return f"DP {dp:g} / DS {ds:g} / TC {tc:g}"
+
+
+def _media_counts(entry: dict[str, Any]) -> str:
+    values = []
+    for label, keys in (
+        ("TV", ("tv", "television")),
+        ("Movies", ("movies", "movie")),
+        ("Music", ("music",)),
+    ):
+        if any(key in entry for key in keys):
+            values.append(f"{label}: {sum(number(entry.get(key)) for key in keys):g}")
+    return " / ".join(values)
 
 
 def _chart(title: str, data: Any, *, trim_dates: bool = False, streams: Any = None) -> str:
     entries = _graph_rows(data)
     values = [(entry, _amount(entry, _is_graph(data))) for entry in entries]
     if trim_dates:
-        first = next((index for index, (_, amount) in enumerate(values) if amount > 0), 0)
+        first = next((index for index, (_, amount) in enumerate(values) if amount > 0), len(values))
+        if values and first == len(values):
+            return f"{title}\nTotal: 0 plays | Average: 0.00 plays\nNo plays in this date range."
         values = values[first:]
     if not values:
         return f"{title}: no data."
     total = sum(amount for _, amount in values)
     peak_index, (_, peak) = max(enumerate(values), key=lambda item: item[1][1])
     lines = [title, f"Total: {total:g} plays | Average: {total / len(values):.2f} plays"]
-    if _is_graph(data):
-        breakdown = []
-        for label, keys in (
-            ("TV", ("tv", "television")),
-            ("Movies", ("movies", "movie")),
-            ("Music", ("music",)),
-        ):
-            amount = sum(sum(number(entry.get(key)) for key in keys) for entry, _ in values)
-            breakdown.append(f"{label}: {amount:g}")
-        lines.append(" | ".join(breakdown))
+    media_totals: dict[str, Any] = {}
+    for entry, _ in values:
+        for key in ("tv", "television", "movies", "movie", "music"):
+            if key in entry:
+                media_totals[key] = number(media_totals.get(key)) + number(entry[key])
+    if breakdown := _media_counts(media_totals):
+        lines.append(breakdown.replace(" / ", " | "))
     stream_map = {_label(entry): entry for entry in _graph_rows(streams)}
     for index, (entry, amount) in enumerate(values):
         label = _label(entry)
         bar = "█" * min(30, round(amount / max(peak, 1) * 30))
-        detail = f" | {_decision_counts(stream_map[label])}" if label in stream_map else ""
+        counts = (
+            _decision_counts(stream_map[label]) if label in stream_map else _media_counts(entry)
+        )
+        detail = f" | {counts}" if counts else ""
         marker = " ← peak" if index == peak_index and peak > 0 else ""
-        display_label = (format_timestamp(label)[:10] or label) if trim_dates else label
-        lines.append(f"{display_label}: {bar} {amount:g}{detail}{marker}")
+        display_label = (format_timestamp(label) or label) if trim_dates else label
+        lines.append(f"{display_label}: {bar} {amount:g}{marker}{detail}")
     return "\n".join(lines)
 
 
@@ -188,14 +204,15 @@ def _quality_section(title: str, data: Any, *, overall: bool = False) -> str:
         percent = decisions[2] / total * 100 if total else 0
         amount = total if _is_graph(data) else _plays(entry) or total
         lines.append(
-            f"{_label(entry)} — {amount:g} plays | {_decision_counts(entry)} | TC {percent:.1f}%"
+            f"{_label(entry)} — {amount:g} plays"
+            f" | {_decision_counts(entry, full=True)} | TC {percent:.1f}%"
         )
     if overall:
         total = sum(totals)
         percent = totals[2] / total * 100 if total else 0
         lines.append(
-            f"Overall — {total:g} plays | DP {totals[0]:g} / DS {totals[1]:g}"
-            f" / TC {totals[2]:g} | TC {percent:.1f}%"
+            f"Overall — {total:g} plays | direct play {totals[0]:g}"
+            f" / direct stream {totals[1]:g} / transcode {totals[2]:g} | TC {percent:.1f}%"
         )
     return "\n".join(lines)
 
@@ -211,6 +228,24 @@ def _down_transcoded(source: Any, delivered: Any) -> bool:
     delivered_tc = sum(_decisions(entry)[2] for entry in streams)
     lower_tc = sum(_decisions(entry)[2] for entry in streams if _label(entry).lower() in lower)
     return source_4k > 0 and source_tc == delivered_tc and delivered_tc == lower_tc
+
+
+def _suggests_down_transcoding(source: Any, delivered: Any) -> bool:
+    if not (_is_graph(source) and _is_graph(delivered)):
+        return False
+    sources, streams = _graph_rows(source), _graph_rows(delivered)
+    four_k = {"4k", "2160", "2160p"}
+    lower = {"1080", "1080p", "720", "720p", "576", "576p", "480", "480p", "sd"}
+    source_4k = [entry for entry in sources if _label(entry).lower() in four_k]
+    delivered_4k = [entry for entry in streams if _label(entry).lower() in four_k]
+    return (
+        sum(_decisions(entry)[2] for entry in source_4k) > 0
+        and sum(_amount(entry, True) for entry in source_4k)
+        > sum(_amount(entry, True) for entry in delivered_4k)
+        and sum(_decisions(entry)[2] for entry in streams if _label(entry).lower() in lower) > 0
+        and sum(_amount(entry, True) for entry in sources)
+        == sum(_amount(entry, True) for entry in streams)
+    )
 
 
 def _optional_id(value: Any) -> int | None:
@@ -273,15 +308,25 @@ def register_analytics_tools(mcp: FastMCP) -> None:
         )
         lines = ["User stats"]
         for index, entry in enumerate(users, 1):
-            name = text(entry.get("friendly_name")) or text(entry.get("username")) or "User"
+            name = (
+                text(entry.get("friendly_name"))
+                or text(entry.get("username"))
+                or text(entry.get("title"))
+                or "User"
+            )
             details = [
                 f"{index}. {name} — {_plays(entry):g} plays",
                 format_duration(entry.get("total_time", entry.get("duration", 0))),
             ]
-            last_seen = format_timestamp(entry.get("last_seen", entry.get("last_played")))
+            last_seen = format_timestamp(entry.get("last_seen"))
             if last_seen:
                 details.append(f"Last seen: {last_seen}")
-            latest = media_title(entry)
+            latest_title = text(entry.get("last_played")) or text(entry.get("full_title"))
+            latest = (
+                media_title({**entry, "title": latest_title, "full_title": latest_title})
+                if latest_title or text(entry.get("grandparent_title"))
+                else ""
+            )
             if latest:
                 details.append(f"Latest: {latest}")
             ids = identifiers(entry)
@@ -376,4 +421,9 @@ def register_analytics_tools(mcp: FastMCP) -> None:
         )
         if _down_transcoded(source, delivered):
             result += "\n4K sources were down-transcoded to lower delivered resolutions."
+        elif _suggests_down_transcoding(source, delivered):
+            result += (
+                "\nFewer 4K plays were delivered than sourced; aggregate counts suggest"
+                " some 4K down-transcoding, but do not establish individual stream paths."
+            )
         return result

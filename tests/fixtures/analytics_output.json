@@ -50,9 +50,9 @@
     "response": {
       "result": "success",
       "data": {"recordsTotal": 3, "data": [
-        {"friendly_name": "Guest", "username": "guest", "user_id": 3, "plays": 2, "total_time": 3600, "last_seen": "2024-01-03", "full_title": "Guest Movie"},
+        {"friendly_name": "Guest", "username": "guest", "title": "Guest display title", "user_id": 3, "plays": 2, "total_time": 3600, "last_seen": "2024-01-03", "last_played": "Guest Movie"},
         {"friendly_name": "Unused", "plays": 0, "last_seen": 0},
-        {"friendly_name": "Family Room", "username": "internal-user", "user_id": 2, "plays": "12", "total_time": "36000", "last_seen": "1704153600", "full_title": "Latest Movie", "year": 2024, "media_type": "movie"}
+        {"friendly_name": "Family Room", "username": "internal-user", "title": "Owner display title", "user_id": 2, "plays": "12", "total_time": "36000", "last_seen": "1704153600", "last_played": "Latest Movie", "year": 2024, "media_type": "movie"}
       ]}
     }
   },
@@ -158,14 +158,14 @@
         "rating_key": "201",
         "platform": "Web",
         "video_codec": "hevc",
-        "video_resolution": "4k",
+        "video_full_resolution": "4K",
         "video_width": 3840,
         "video_height": 2160,
         "audio_codec": "truehd",
         "audio_channels": 8,
         "bitrate": 24000,
         "stream_video_codec": "h264",
-        "stream_video_resolution": "1080",
+        "stream_video_full_resolution": "1080p",
         "stream_video_width": 1920,
         "stream_video_height": 1080,
         "stream_audio_codec": "aac",

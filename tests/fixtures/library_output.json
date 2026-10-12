@@ -8,7 +8,7 @@
     ]
   },
   "get_library_media_info": {
-    "total_file_size": "3221225472",
+    "total_file_size": "3.00 GB",
     "filtered_file_size": "1073741824",
     "data": [
       {"rating_key": "42", "title": "Example Film", "year": "2024", "media_type": "movie", "video_resolution": "1080", "video_codec": "h264", "audio_codec": "aac", "container": "mkv", "file_size": "1073741824", "play_count": "3", "last_played": "1704067200", "file": "/private/movies/film.mkv"},

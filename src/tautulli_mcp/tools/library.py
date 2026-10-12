@@ -1,6 +1,5 @@
 """Library overview and item browsing tool."""
 
-import re
 from typing import Annotated, Any, Literal
 
 from fastmcp import Context, FastMCP
@@ -34,19 +33,6 @@ ORDER_BY = (
 ORDER_DIRECTIONS = ("asc", "desc")
 
 
-def _library_size(value: Any) -> str:
-    rendered = text(value)
-    if not rendered:
-        return ""
-    if re.fullmatch(r"\d+(?:\.\d+)?\s*[KMGTPE]?I?B", rendered, re.IGNORECASE):
-        return rendered
-    try:
-        float(rendered)
-    except ValueError:
-        return ""
-    return format_size(value)
-
-
 def _overview(item: dict[str, Any]) -> str:
     section = item.get("section_id", item.get("id"))
     kind = text(item.get("section_type") or item.get("type"))
@@ -77,7 +63,7 @@ def _item_line(item: dict[str, Any]) -> str:
         value = text(item.get(key))
         if value:
             parts.append(value)
-    size = _library_size(item.get("file_size"))
+    size = format_size(item.get("file_size"))
     if size:
         parts.append(size)
     if text(item.get("play_count")):
@@ -151,8 +137,8 @@ def register_library_tools(mcp: FastMCP) -> None:
         if search:
             params["search"] = search
         data = await client.call("get_library_media_info", **params)
-        title = f"Library section {section_id}"
-        total_size = _library_size(data.get("total_file_size")) if isinstance(data, dict) else ""
+        title = f"Library {identifiers({'section_id': section_id})}"
+        total_size = format_size(data.get("total_file_size")) if isinstance(data, dict) else ""
         if total_size:
             title += f" | Total library size: {total_size}"
         entries = rows(data)

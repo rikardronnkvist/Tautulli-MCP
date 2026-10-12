@@ -37,7 +37,7 @@ DEFAULTS = {
         "search": None,
     },
     "history": {
-        "length": 25,
+        "length": 10,
         "user": None,
         "media_type": None,
         "search": None,
@@ -45,7 +45,7 @@ DEFAULTS = {
         "include_stream_details": False,
         "include_ip": False,
     },
-    "top_content": {"category": "movies", "stat_type": "plays", "days": 30},
+    "top_content": {"category": "tv", "stat_type": "plays", "days": 30},
     "user_stats": {"user": None},
     "viewing_patterns": {"group_by": "date", "days": 30},
     "stream_quality": {"view": "transcode", "days": 30, "row_id": None, "session_key": None},
