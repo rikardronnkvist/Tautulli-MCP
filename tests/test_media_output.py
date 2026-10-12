@@ -141,6 +141,7 @@ async def test_history_details_and_totals(media_data, monkeypatch) -> None:
         "hevc",
         "h264",
         "Bandwidth limit",
+        "720p",
     ):
         assert value in result
     assert "Duration: 1800" not in result
@@ -224,7 +225,14 @@ async def test_history_nested_stream_payload_and_failed_enrichment(media_data) -
                 )
             data = {
                 "session_info": {"session_key": "799"},
-                "media_info": [{"video_codec": "hevc", "stream_video_codec": "h264"}],
+                "media_info": [
+                    {
+                        "video_codec": "hevc",
+                        "video_full_resolution": "2160p",
+                        "stream_video_codec": "h264",
+                        "stream_video_full_resolution": "1080p",
+                    }
+                ],
             }
         else:
             data = copy.deepcopy(media_data[command])
@@ -237,6 +245,8 @@ async def test_history_nested_stream_payload_and_failed_enrichment(media_data) -
     assert result.count("[session_key: 799]") == 1
     assert "hevc" in result
     assert "h264" in result
+    assert "2160p" in result
+    assert "1080p" in result
     assert "The Film (2025)" in result
     assert "Unavailable" not in result
     assert_private_fields_absent(result)
@@ -334,6 +344,22 @@ async def test_item_user_ranking_is_numeric_and_limited(media_data) -> None:
     assert "Viewer 01" not in result
     assert "Viewer 00" not in result
     assert sum(line.startswith(" • Viewer") for line in result.splitlines()) == 15
+
+
+@pytest.mark.asyncio
+async def test_item_reads_hdr_dv_from_nested_video_streams_only(media_data) -> None:
+    media = media_data["get_metadata"]["media_info"][0]
+    media["video_full_resolution"] = "2160p"
+    media["parts"][0]["streams"].insert(
+        0, {"type": "2", "video_dynamic_range": "Audio-only HDR", "video_dovi_present": "1"}
+    )
+    async with media_tools(media_data) as (mcp, ctx, _):
+        result = await (await mcp.get_tool("item_details")).fn(ctx=ctx, rating_key=202)
+    assert "Resolution: 2160p" in result
+    assert "Dynamic range: HDR10" in result
+    assert "Dolby Vision" in result
+    assert "Audio-only HDR" not in result
+    assert_private_fields_absent(result)
 
 
 @pytest.mark.asyncio

@@ -49,9 +49,9 @@
         "stream_video_decision": "transcode",
         "stream_audio_decision": "transcode",
         "transcode_decision_string": "Bandwidth limit",
-        "video_resolution": "4k",
+        "video_full_resolution": "4k",
         "video_codec": "hevc",
-        "stream_video_resolution": "720",
+        "stream_video_full_resolution": "720p",
         "stream_video_codec": "h264",
         "stream_audio_codec": "aac",
         "stream_audio_channels": "2",
@@ -110,9 +110,9 @@
     "row_id": "11",
     "session_key": "701",
     "video_codec": "hevc",
-    "video_resolution": "4k",
+    "video_full_resolution": "2160p",
     "stream_video_codec": "h264",
-    "stream_video_resolution": "720",
+    "stream_video_full_resolution": "720p",
     "stream_audio_codec": "aac",
     "stream_audio_channels": "2",
     "transcode_decision": "transcode",
@@ -161,9 +161,14 @@
         "audio_codec": "truehd",
         "audio_channels": "7.1",
         "container": "mkv",
-        "video_dynamic_range": "HDR10",
-        "video_dovi_present": "1",
-        "parts": [{"file": "/private/library/film.mkv", "file_size": "1073741824"}]
+        "parts": [{
+          "file": "/private/library/film.mkv",
+          "file_size": "1073741824",
+          "streams": [
+            {"type": "1", "video_dynamic_range": "HDR10", "video_dovi_present": "1"},
+            {"type": "2", "audio_codec": "truehd", "file": "/private/audio"}
+          ]
+        }]
       }
     ],
     "file": "/private/library/film.mkv",

@@ -133,6 +133,11 @@ def _media_counts(entry: dict[str, Any]) -> str:
     return " / ".join(values)
 
 
+def _watch_time(entry: dict[str, Any], fields: tuple[str, ...]) -> str:
+    value = next((entry.get(key) for key in fields if text(entry.get(key))), None)
+    return format_duration(value)
+
+
 def _chart(title: str, data: Any, *, trim_dates: bool = False, streams: Any = None) -> str:
     entries = _graph_rows(data)
     values = [(entry, _amount(entry, _is_graph(data))) for entry in entries]
@@ -181,12 +186,12 @@ def _ranked(title: str, entries: list[dict[str, Any]], category: str) -> str:
             year = text(entry.get("year"))
             if category == "movies" and year and f"({year})" not in name:
                 name += f" ({year})"
-        duration = format_duration(
-            entry.get("total_duration", entry.get("duration", entry.get("total_time", 0)))
-        )
+        duration = _watch_time(entry, ("total_duration", "duration", "total_time"))
         ids = identifiers(entry)
         lines.append(
-            f"{index}. {name} — {_plays(entry):g} plays, {duration}" + (f" {ids}" if ids else "")
+            f"{index}. {name} — {_plays(entry):g} plays"
+            + (f", {duration}" if duration else "")
+            + (f" {ids}" if ids else "")
         )
     return "\n".join(lines)
 
@@ -314,14 +319,17 @@ def register_analytics_tools(mcp: FastMCP) -> None:
                 or text(entry.get("title"))
                 or "User"
             )
-            details = [
-                f"{index}. {name} — {_plays(entry):g} plays",
-                format_duration(entry.get("total_time", entry.get("duration", 0))),
-            ]
+            details = [f"{index}. {name} — {_plays(entry):g} plays"]
+            if duration := _watch_time(entry, ("total_time", "total_duration", "duration")):
+                details.append(duration)
             last_seen = format_timestamp(entry.get("last_seen"))
             if last_seen:
                 details.append(f"Last seen: {last_seen}")
-            latest_title = text(entry.get("last_played")) or text(entry.get("full_title"))
+            last_played = entry.get("last_played")
+            latest_title = text(last_played) if isinstance(last_played, str) else ""
+            if abs(number(latest_title)) >= 100_000_000:
+                latest_title = ""
+            latest_title = latest_title or text(entry.get("full_title"))
             latest = (
                 media_title({**entry, "title": latest_title, "full_title": latest_title})
                 if latest_title or text(entry.get("grandparent_title"))

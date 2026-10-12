@@ -127,6 +127,12 @@ def _media_info(record: dict[str, Any]) -> list[str]:
     for media in info:
         # Parts can contain file sizes, but their file paths must never be displayed.
         parts = rows(media.get("parts"))
+        for part in parts:
+            for stream in rows(part.get("streams")):
+                if text(_first(stream, "type", "stream_type")).lower() in {"1", "video"}:
+                    for key, value in stream.items():
+                        if not text(media.get(key)) and text(value):
+                            media[key] = value
         size = _first(media, "file_size", "size")
         if size is None:
             sizes = [_first(part, "file_size", "size") for part in parts]
@@ -134,7 +140,14 @@ def _media_info(record: dict[str, Any]) -> list[str]:
                 size = sum(number(value) for value in sizes)
         fields = [
             _field(
-                "Resolution", _first(media, "video_resolution", "source_resolution", "resolution")
+                "Resolution",
+                _first(
+                    media,
+                    "video_full_resolution",
+                    "video_resolution",
+                    "source_resolution",
+                    "resolution",
+                ),
             ),
             _field("Video", _first(media, "video_codec", "source_video_codec")),
             _field("Audio", _first(media, "audio_codec", "source_audio_codec")),

@@ -92,6 +92,37 @@ async def test_top_content_caps_rows_at_ten(payloads: dict[str, Any]) -> None:
     assert "Extra show 8" not in output
 
 
+@pytest.mark.parametrize("value", [None, "unknown", "missing"])
+async def test_missing_watch_time_does_not_fabricate_zero_or_empty_separators(
+    payloads: dict[str, Any], value: Any
+) -> None:
+    shows = payloads["top_tv"]["response"]["data"][1]["rows"]
+    users = payloads["get_users_table"]["response"]["data"]["data"]
+    for entries, key in ((shows, "total_duration"), (users, "total_time")):
+        for entry in entries:
+            if value == "missing":
+                entry.pop(key, None)
+            else:
+                entry[key] = value
+    top, _ = await invoke("top_content", payloads)
+    user_output, _ = await invoke("user_stats", payloads)
+    assert "12 plays [rating_key: 101]" in top
+    assert "plays," not in top
+    for output in (top, user_output):
+        assert "0s" not in output
+        assert "|  |" not in output
+        assert "unknown" not in output.lower()
+
+
+async def test_actual_zero_watch_time_is_retained(payloads: dict[str, Any]) -> None:
+    payloads["top_tv"]["response"]["data"][1]["rows"][0]["total_duration"] = 0
+    payloads["get_users_table"]["response"]["data"]["data"][2]["total_time"] = 0
+    top, _ = await invoke("top_content", payloads)
+    users, _ = await invoke("user_stats", payloads)
+    assert "12 plays, 0s" in top
+    assert "12 plays | 0s" in users
+
+
 async def test_users_sorted_locally_with_readable_time_and_latest_title(
     payloads: dict[str, Any],
 ) -> None:
@@ -126,6 +157,24 @@ async def test_user_last_played_is_a_title_not_a_timestamp(payloads: dict[str, A
     assert "Latest: The Latest Media Title" in output
     assert "Latest: Fallback Media Title" in output
     assert output.count("Last seen:") == 1
+
+
+@pytest.mark.parametrize("last_played", [1767225600, "1767225600", 1767225600.0])
+async def test_numeric_last_played_is_not_rendered_as_a_media_title(
+    payloads: dict[str, Any], last_played: Any
+) -> None:
+    users = payloads["get_users_table"]["response"]["data"]["data"]
+    users[:] = [{"title": "User Display Title", "plays": 2, "last_played": last_played}]
+    output, _ = await invoke("user_stats", payloads)
+    assert "Latest:" not in output
+    assert "1767225600" not in output
+
+
+async def test_numeric_movie_title_remains_a_title(payloads: dict[str, Any]) -> None:
+    users = payloads["get_users_table"]["response"]["data"]["data"]
+    users[:] = [{"title": "User Display Title", "plays": 2, "last_played": "1917"}]
+    output, _ = await invoke("user_stats", payloads)
+    assert "Latest: 1917" in output
 
 
 async def test_dates_trim_only_leading_zeros_and_align_decisions_by_date(
