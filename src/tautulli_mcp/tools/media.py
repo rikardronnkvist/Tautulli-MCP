@@ -153,7 +153,17 @@ def register_media_tools(mcp: FastMCP) -> None:
         data = await client_from_context(ctx).call(
             "search", query=query.strip(), limit=clamp(limit, 1, 50)
         )
-        results = rows(data)
+        grouped_results = data.get("results_list") if isinstance(data, dict) else None
+        if isinstance(grouped_results, dict):
+            results = [
+                {"media_type": media_type, **item}
+                for media_type, items in grouped_results.items()
+                if isinstance(items, list)
+                for item in items
+                if isinstance(item, dict)
+            ]
+        else:
+            results = rows(data)
         if not results:
             return "Search: no matches."
         groups: dict[str, list[str]] = {}

@@ -21,7 +21,7 @@ HOME_STATS_IDS = {
 
 
 def _chart(title: str, data: Any) -> str:
-    entries = rows(data)
+    entries = _graph_rows(data, "label")
     if not entries:
         return f"{title}: no data."
     values = []
@@ -38,9 +38,12 @@ def _chart(title: str, data: Any) -> str:
             or entry.get("stream_type")
         )
         try:
-            amount = float(
-                entry.get("plays") or entry.get("count") or entry.get("total_plays") or 0
-            )
+            if _is_graph(data):
+                amount = sum(float(value or 0) for key, value in entry.items() if key != "label")
+            else:
+                amount = float(
+                    entry.get("plays") or entry.get("count") or entry.get("total_plays") or 0
+                )
         except (TypeError, ValueError):
             amount = 0
         values.append((label, amount))
@@ -52,6 +55,47 @@ def _chart(title: str, data: Any) -> str:
         marker = " ← peak" if index == peak_index else ""
         lines.append(f"{label}: {bar} {amount:g}{marker}")
     return "\n".join(lines)
+
+
+def _series_key(name: Any) -> str:
+    return text(name, "value").strip().lower().replace(" ", "_").replace("-", "_")
+
+
+def _is_graph(data: Any) -> bool:
+    return (
+        isinstance(data, dict)
+        and isinstance(data.get("categories"), list)
+        and isinstance(data.get("series"), list)
+    )
+
+
+def _graph_rows(data: Any, category_field: str) -> list[dict[str, Any]]:
+    if not _is_graph(data):
+        return rows(data)
+    categories = data["categories"]
+    series = [
+        (_series_key(item.get("name")), item.get("data"))
+        for item in data["series"]
+        if isinstance(item, dict) and isinstance(item.get("data"), list)
+    ]
+    return [
+        {
+            category_field: category,
+            **{name: values[index] for name, values in series if index < len(values)},
+        }
+        for index, category in enumerate(categories)
+    ]
+
+
+def _graph_fields(data: Any, category_field: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
+    if not _is_graph(data):
+        return fallback
+    series_fields = (
+        _series_key(item.get("name"))
+        for item in data["series"]
+        if isinstance(item, dict) and isinstance(item.get("data"), list)
+    )
+    return (category_field, *series_fields)
 
 
 def _number(value: Any) -> float:
@@ -97,7 +141,7 @@ def register_analytics_tools(mcp: FastMCP) -> None:
     )
     async def user_stats(ctx: Context, user: str | None = None) -> str:
         data = await client_from_context(ctx).call(
-            "get_users_table", **({"user": user} if user else {})
+            "get_users_table", **({"search": user} if user else {})
         )
         users = [
             entry
@@ -135,8 +179,8 @@ def register_analytics_tools(mcp: FastMCP) -> None:
                 + "\n\n"
                 + compact_lines(
                     "Plays by stream type",
-                    rows(streams),
-                    ("stream_type", "plays", "count"),
+                    _graph_rows(streams, "stream_type"),
+                    _graph_fields(streams, "stream_type", ("stream_type", "plays", "count")),
                 )
             )
         return _chart(f"Viewing patterns by {group_by}", data)
@@ -183,8 +227,8 @@ def register_analytics_tools(mcp: FastMCP) -> None:
             data = await client.call("get_plays_by_stream_type", time_range=duration)
             return compact_lines(
                 "Plays by stream type",
-                rows(data),
-                ("stream_type", "plays", "count"),
+                _graph_rows(data, "stream_type"),
+                _graph_fields(data, "stream_type", ("stream_type", "plays", "count")),
             )
         if view == "platforms":
             platform_data, home_data = await asyncio.gather(
@@ -199,8 +243,12 @@ def register_analytics_tools(mcp: FastMCP) -> None:
             return (
                 compact_lines(
                     "Stream type by platform",
-                    rows(platform_data),
-                    ("platform", "direct_play", "direct_stream", "transcode"),
+                    _graph_rows(platform_data, "platform"),
+                    _graph_fields(
+                        platform_data,
+                        "platform",
+                        ("platform", "direct_play", "direct_stream", "transcode"),
+                    ),
                 )
                 + "\n\n"
                 + compact_lines(
@@ -216,13 +264,21 @@ def register_analytics_tools(mcp: FastMCP) -> None:
         return (
             compact_lines(
                 "Plays by source resolution",
-                rows(source_data),
-                ("source_resolution", "resolution", "plays", "count"),
+                _graph_rows(source_data, "source_resolution"),
+                _graph_fields(
+                    source_data,
+                    "source_resolution",
+                    ("source_resolution", "resolution", "plays", "count"),
+                ),
             )
             + "\n\n"
             + compact_lines(
                 "Plays by stream resolution",
-                rows(stream_data),
-                ("stream_resolution", "resolution", "plays", "count"),
+                _graph_rows(stream_data, "stream_resolution"),
+                _graph_fields(
+                    stream_data,
+                    "stream_resolution",
+                    ("stream_resolution", "resolution", "plays", "count"),
+                ),
             )
         )

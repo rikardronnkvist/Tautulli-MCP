@@ -11,7 +11,7 @@ ORDER_BY = (
     "added_at",
     "video_resolution",
     "last_played",
-    "title",
+    "sort_title",
 )
 ORDER_DIRECTIONS = ("asc", "desc")
 
@@ -49,7 +49,7 @@ def register_library_tools(mcp: FastMCP) -> None:
             return "\n".join(lines)
         params = {
             "section_id": section_id,
-            "order_by": order_by,
+            "order_column": order_by,
             "order_dir": order_dir,
             "length": clamp(length, 1, 100),
         }

@@ -93,7 +93,15 @@ def test_item_details_omits_file_paths() -> None:
 
 def test_search_clamps_limit_and_includes_chaining_rating_key() -> None:
     fake = FakeTautulli(
-        {"search": [{"title": "Example", "rating_key": "42", "media_type": "movie"}]}
+        {
+            "search": {
+                "results_count": 1,
+                "results_list": {
+                    "movie": [{"title": "Example", "rating_key": "42"}],
+                    "show": [{"title": "Example Show", "rating_key": "43"}],
+                },
+            }
+        }
     )
     mcp = FastMCP("test")
     register_tools(mcp)
@@ -104,6 +112,8 @@ def test_search_clamps_limit_and_includes_chaining_rating_key() -> None:
 
     assert fake.calls[0] == ("search", {"query": "Example", "limit": 50})
     assert "[key: 42]" in result
+    assert "Movie: Example [key: 42]" in result
+    assert "Show: Example Show [key: 43]" in result
 
 
 def test_top_content_clamps_days_and_maps_category() -> None:
@@ -141,6 +151,34 @@ def test_user_stats_omits_zero_play_users() -> None:
 
     assert "Owner" in result
     assert "Unused" not in result
+
+
+def test_user_stats_passes_username_as_search() -> None:
+    fake = FakeTautulli({"get_users_table": [{"friendly_name": "Owner", "plays": 5}]})
+    mcp = FastMCP("test")
+    register_tools(mcp)
+
+    asyncio.run(get_tool(mcp, "user_stats").fn(ctx=tool_context(fake), user="Owner"))
+
+    assert fake.calls == [("get_users_table", {"search": "Owner"})]
+
+
+def test_library_uses_tautulli_order_column_and_sort_title() -> None:
+    fake = FakeTautulli({})
+    mcp = FastMCP("test")
+    register_tools(mcp)
+
+    result = asyncio.run(
+        get_tool(mcp, "library").fn(ctx=tool_context(fake), section_id="1", order_by="sort_title")
+    )
+
+    assert result == "Library section 1"
+    assert fake.calls == [
+        (
+            "get_library_media_info",
+            {"section_id": "1", "order_column": "sort_title", "order_dir": "desc", "length": 25},
+        )
+    ]
 
 
 def test_stream_quality_requires_identity_and_valid_view() -> None:
@@ -194,7 +232,19 @@ async def test_all_tools_with_respx_responses_from_json_fixture() -> None:
                 "top_content": await (await mcp.get_tool("top_content")).fn(ctx=ctx),
                 "user_stats": await (await mcp.get_tool("user_stats")).fn(ctx=ctx),
                 "viewing_patterns": await (await mcp.get_tool("viewing_patterns")).fn(ctx=ctx),
+                "weekday_patterns": await (await mcp.get_tool("viewing_patterns")).fn(
+                    ctx=ctx, group_by="weekday"
+                ),
+                "hour_patterns": await (await mcp.get_tool("viewing_patterns")).fn(
+                    ctx=ctx, group_by="hour"
+                ),
                 "stream_quality": await (await mcp.get_tool("stream_quality")).fn(ctx=ctx),
+                "platform_quality": await (await mcp.get_tool("stream_quality")).fn(
+                    ctx=ctx, view="platforms"
+                ),
+                "resolution_quality": await (await mcp.get_tool("stream_quality")).fn(
+                    ctx=ctx, view="resolution"
+                ),
             }
 
     assert all(isinstance(result, str) for result in results.values())
@@ -207,4 +257,13 @@ async def test_all_tools_with_respx_responses_from_json_fixture() -> None:
     assert "total_plays_30=4" in results["item_details"]
     assert "[id: 1]" in results["library"]
     assert "peak" in results["viewing_patterns"]
+    assert "2026-01-01:" in results["viewing_patterns"]
+    assert "5 ← peak" in results["viewing_patterns"]
+    assert "Direct Play" in results["viewing_patterns"]
+    assert "7 ← peak" in results["weekday_patterns"]
+    assert "10:00:" in results["hour_patterns"]
+    assert "plays=5" in results["stream_quality"]
+    assert "direct_play=5" in results["platform_quality"]
+    assert "source_resolution=1080" in results["resolution_quality"]
+    assert "stream_resolution=720" in results["resolution_quality"]
     assert all(request.url.params["apikey"] == "fixture-key" for request in calls)
